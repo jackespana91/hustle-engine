@@ -116,6 +116,8 @@ export class RoundController {
 
   reset(): void {
     this.queue.clear();
+    if (this.state === "presenting") this.transition("interrupted", "reset");
+    if (["requesting", "received", "recovering"].includes(this.state)) this.transition("failed", "reset");
     if (this.state !== "idle") this.transition("idle", "reset");
     this.outcomeValue = null;
     this.progressValue = { totalWinPresented: money(0), lastEventOrder: -1 };

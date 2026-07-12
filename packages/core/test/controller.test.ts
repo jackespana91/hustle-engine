@@ -71,4 +71,16 @@ describe("RoundController", () => {
     expect(recoveryExecutor.ids).not.toContain(snapshot.completedCommands[0]?.id);
     expect(recoveryExecutor.ids).not.toContain(snapshot.completedCommands[1]?.id);
   });
+
+  it("resets an active presentation through legal transitions", async () => {
+    const executor = new InterruptibleExecutor();
+    const controller = new RoundController(executor);
+    controller.startRequest(outcome.bet);
+    const running = controller.receiveOutcome(outcome);
+    await tick();
+    controller.reset();
+    await running;
+    expect(controller.state).toBe("idle");
+    expect(controller.transitionHistory.slice(-2).map(({ to }) => to)).toEqual(["interrupted", "idle"]);
+  });
 });

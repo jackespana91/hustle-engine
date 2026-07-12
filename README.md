@@ -42,6 +42,10 @@ Task 001 is the first reusable vertical slice: a mocked Stake-style response is 
 
 Amounts are integer micro-units (`1_000_000` represents one major currency unit). The mocked response schema is not presented as Stake Engine's final production API, and this slice performs no networking, wagering, RNG, RTP, or game-specific outcome logic.
 
+### Hustle Debug Panel · Task 002
+
+Hustle Core exports a reusable, game-neutral debug panel for every future browser game. It provides live lifecycle, queue, snapshot, event, telemetry, frame-performance, input, and deterministic testing controls in a dark docked interface. Install it with `installHustleDebugPanel(...)`, supplying only a debug-state reader and safe action callbacks. Toggle it with `Cmd+Shift+D` on macOS or `Ctrl+Shift+D` elsewhere.
+
 ### Installation
 
 Requires Node.js 20 or newer and npm.

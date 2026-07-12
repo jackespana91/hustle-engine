@@ -2,6 +2,7 @@ export * from "./animation-queue.js";
 export * from "./commands.js";
 export * from "./contracts.js";
 export * from "./controller.js";
+export * from "./debug-panel.js";
 export * from "./errors.js";
 export * from "./event-bus.js";
 export * from "./snapshot.js";

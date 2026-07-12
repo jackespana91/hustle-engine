@@ -42,3 +42,15 @@ engine-playground       -- rectangles, counters and text only
 Interrupting aborts the active executor and places its command at the front of the pending queue because completion is not known. A snapshot captures completed, current, and pending commands plus round state, transition history, and presentation progress. Restoration validates version and structure, retains completed commands for inspection, and plays only current/pending work.
 
 Reusable mechanic logic must never be implemented inside a game pack.
+
+## Task 002 debug boundary
+
+`packages/core/src/debug-panel.ts` contains the reusable panel, its contracts, telemetry sampler, event buffer, keyboard shortcut, rendering, and scoped dark-mode styles. It depends only on browser APIs and engine-neutral debug data.
+
+Each game supplies:
+
+- a read-only `DebugPanelState` projection;
+- safe `DebugPanelActions` callbacks for lifecycle and test operations;
+- engine events through `recordEvent`.
+
+This adapter boundary lets future games install the same panel without putting game-specific logic into Core. The panel cannot generate outcomes itself; testing callbacks remain owned by the host and must use the same validated outcome pipeline as normal rounds.

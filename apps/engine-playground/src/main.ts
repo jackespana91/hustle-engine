@@ -1,11 +1,15 @@
 import {
+  EngineError,
   RoundController,
+  installHustleDebugPanel,
   money,
   serializeSnapshot,
   type AnimationCommand,
   type AnimationExecutionContext,
   type AnimationExecutor,
   type EngineEventMap,
+  type HustleDebugPanel,
+  type RecoverySnapshot,
 } from "@hustle/core";
 import {
   adaptMockStakeRound,
@@ -29,8 +33,14 @@ let balance = money(10_000_000);
 let bet = money(0);
 let totalWin = money(0);
 let savedSnapshot: string | null = null;
+let savedSnapshotObject: RecoverySnapshot | null = null;
+let lastSave: string | null = null;
 let activeCommand: AnimationCommand | null = null;
 let failNextAnimation = false;
+let recoveryCount = 0;
+let roundSequence = 1;
+let lastResponse: MockStakeRoundResponse = MOCK_RESPONSE;
+let debugPanel: HustleDebugPanel | null = null;
 const eventLog: string[] = [];
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -38,7 +48,7 @@ if (!root) throw new Error("Missing playground root");
 
 root.innerHTML = `
   <h1>Hustle Engine Playground</h1>
-  <p class="subtitle">Task 001 · deterministic lifecycle · mocked data only</p>
+  <p class="subtitle">Tasks 001–002 · deterministic lifecycle · reusable debug tooling</p>
   <section class="dashboard">
     <div class="metric"><span>Lifecycle</span><strong id="state">idle</strong></div>
     <div class="metric"><span>Balance</span><strong id="balance">—</strong></div>
@@ -78,6 +88,46 @@ class PlaygroundExecutor implements AnimationExecutor {
 
 const controller = new RoundController(new PlaygroundExecutor());
 wireEvents();
+debugPanel = installHustleDebugPanel({
+  getState: () => {
+    const currentEvent = controller.outcome?.events.find((event) => event.order === controller.progress.lastEventOrder);
+    return {
+      currentState: controller.state,
+      currentRound: controller.outcome?.roundId ?? null,
+      currentEvent: currentEvent ? `${currentEvent.type} · ${currentEvent.id}` : null,
+      currentAnimation: activeCommand ? `${activeCommand.type} · ${activeCommand.id}` : null,
+      animationQueueLength: controller.queue.pending.length,
+      currentSnapshot: savedSnapshotObject,
+      lastSave,
+      recoveryVersion: 1,
+      transitionHistory: controller.transitionHistory,
+      animationCount: controller.queue.completed.length + controller.queue.pending.length + (controller.queue.current ? 1 : 0),
+      commandsExecuted: controller.queue.completed.length,
+      recoveryCount,
+    };
+  },
+  actions: {
+    pause: () => controller.queue.pause(),
+    resume: () => controller.queue.resume(),
+    skip: () => controller.queue.skipCurrent(),
+    skipAll: () => controller.queue.skipAll(),
+    replayLastRound: () => startRound({ ...lastResponse, roundId: nextRoundId("replay") }),
+    interrupt: () => saveSnapshot(controller.interrupt()),
+    recover: () => restoreSnapshot(),
+    reset,
+    simulateCrash,
+    generateSmallRound: () => startRound(createDebugRound("small", 2)),
+    generateMediumRound: () => startRound(createDebugRound("medium", 8)),
+    generateHugeRound: () => startRound(createDebugRound("huge", 60)),
+    generateBadRound: () => startRound({ ...createDebugRound("bad", 3), totalWin: -1 }),
+    generateAnimationFailure: async () => {
+      failNextAnimation = true;
+      await startRound(createDebugRound("animation-failure", 3));
+    },
+    generateRecoveryTest: runRecoveryTest,
+  },
+  title: "DEBUG PANEL",
+});
 render();
 
 root.addEventListener("click", (event) => {
@@ -93,12 +143,10 @@ async function perform(action: string): Promise<void> {
     else if (action === "resume") controller.queue.resume();
     else if (action === "skip-current") controller.queue.skipCurrent();
     else if (action === "skip-all") controller.queue.skipAll();
-    else if (action === "interrupt") { savedSnapshot = serializeSnapshot(controller.interrupt()); }
-    else if (action === "save") { savedSnapshot = serializeSnapshot(controller.createSnapshot()); log("snapshot saved"); }
-    else if (action === "restore") {
-      if (!savedSnapshot) throw new Error("Save or interrupt a round first");
-      await controller.restore(savedSnapshot);
-    } else if (action === "reset") reset();
+    else if (action === "interrupt") saveSnapshot(controller.interrupt());
+    else if (action === "save") { saveSnapshot(controller.createSnapshot()); log("snapshot saved"); }
+    else if (action === "restore") await restoreSnapshot();
+    else if (action === "reset") reset();
     else if (action === "malformed") await startRound({ ...MOCK_RESPONSE, totalWin: -1 });
     else if (action === "failure") { failNextAnimation = true; await startRound({ ...MOCK_RESPONSE, roundId: "mock-failure-001" }); }
   } catch (error) {
@@ -108,6 +156,7 @@ async function perform(action: string): Promise<void> {
 }
 
 async function startRound(response: MockStakeRoundResponse): Promise<void> {
+  lastResponse = response;
   bet = money(Number.isSafeInteger(response.betAmount) && response.betAmount >= 0 ? response.betAmount : 0);
   totalWin = money(0);
   controller.startRequest(bet);
@@ -129,7 +178,9 @@ function wireEvents(): void {
   for (const key of keys) {
     controller.events.subscribe(key, (payload) => {
       log(`${key} ${summarize(payload)}`);
+      debugPanel?.recordEvent(key, payload);
       if (key === "animation:completed" || key === "animation:skipped") activeCommand = null;
+      if (key === "round:recovered") recoveryCount += 1;
       render();
     });
   }
@@ -150,6 +201,55 @@ function reset(): void {
   controller.reset();
   balance = money(10_000_000); bet = money(0); totalWin = money(0);
   activeCommand = null; savedSnapshot = null; eventLog.length = 0;
+  savedSnapshotObject = null; lastSave = null; recoveryCount = 0;
+}
+
+function simulateCrash(): void {
+  if (["idle", "completed", "failed"].includes(controller.state)) controller.startRequest(money(0));
+  controller.fail(new EngineError("ANIMATION_EXECUTION_FAILURE", "Simulated debug crash"));
+}
+
+function saveSnapshot(snapshot: RecoverySnapshot): void {
+  savedSnapshotObject = snapshot;
+  savedSnapshot = serializeSnapshot(snapshot);
+  lastSave = new Date().toLocaleTimeString([], { hour12: false });
+  debugPanel?.recordEvent("debug:snapshot-saved", { version: snapshot.version, state: snapshot.lifecycleState });
+}
+
+async function restoreSnapshot(): Promise<void> {
+  if (!savedSnapshot) throw new Error("Save or interrupt a round first");
+  await controller.restore(savedSnapshot);
+}
+
+async function runRecoveryTest(): Promise<void> {
+  const running = startRound(createDebugRound("recovery", 8));
+  await delay(520);
+  if (controller.state === "presenting") saveSnapshot(controller.interrupt());
+  await running;
+  await restoreSnapshot();
+}
+
+function createDebugRound(label: string, eventCount: number): MockStakeRoundResponse {
+  const resultEvents = Array.from({ length: eventCount }, (_, order) => ({
+    id: `${label}-event-${order}`,
+    type: "debug-step",
+    order,
+    amount: order % 3 === 0 ? 250_000 : 0,
+    data: { label: `Debug event ${order + 1} of ${eventCount}`, scale: label },
+  }));
+  return {
+    roundId: nextRoundId(label),
+    betAmount: 1_000_000,
+    totalWin: resultEvents.reduce((sum, event) => sum + event.amount, 0),
+    completed: true,
+    resultEvents,
+  };
+}
+
+function nextRoundId(label: string): string {
+  const id = `debug-${label}-${String(roundSequence).padStart(3, "0")}`;
+  roundSequence += 1;
+  return id;
 }
 
 function render(): void {
@@ -177,4 +277,8 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
     const timeout = window.setTimeout(resolve, ms);
     signal.addEventListener("abort", () => { window.clearTimeout(timeout); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
   });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
