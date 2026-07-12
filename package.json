@@ -1,0 +1,15 @@
+{
+  "name": "hustle-engine",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "echo \"Build tooling is not configured yet\"",
+    "test": "echo \"Test tooling is not configured yet\"",
+    "lint": "echo \"Lint tooling is not configured yet\"",
+    "typecheck": "echo \"Typecheck tooling is not configured yet\""
+  }
+}
