@@ -46,6 +46,10 @@ Amounts are integer micro-units (`1_000_000` represents one major currency unit)
 
 Hustle Core exports a reusable, game-neutral debug panel for every future browser game. It provides live lifecycle, queue, snapshot, event, telemetry, frame-performance, input, and deterministic testing controls in a dark docked interface. Install it with `installHustleDebugPanel(...)`, supplying only a debug-state reader and safe action callbacks. Toggle it with `Cmd+Shift+D` on macOS or `Ctrl+Shift+D` elsewhere.
 
+### Hustle Feature SDK · Task 003
+
+The Feature SDK provides deterministic plugin registration, engine compatibility discovery, dependency validation, lifecycle execution, enable/disable controls, and versioned state serialization. Six demo feature classes are placeholders only. See [`docs/features.md`](docs/features.md) for the authoring contract and integration rules.
+
 ### Installation
 
 Requires Node.js 20 or newer and npm.

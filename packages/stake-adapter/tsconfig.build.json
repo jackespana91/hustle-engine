@@ -8,7 +8,7 @@
     "rootDir": "src",
     "types": [],
     "paths": {
-      "@hustle/core": ["../core/dist/index.d.ts"]
+      "@hustle/core": ["../core/dist/src/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

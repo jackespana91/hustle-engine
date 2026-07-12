@@ -5,9 +5,9 @@
     "composite": false,
     "declaration": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "types": []
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "features/**/*.ts"],
   "exclude": ["test/**/*.ts"]
 }

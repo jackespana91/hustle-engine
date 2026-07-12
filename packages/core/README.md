@@ -11,3 +11,7 @@ Hustle Core contains no Stake response types and no game-specific mechanics.
 Task 002 exports `installHustleDebugPanel`, a framework-independent browser panel that mounts itself, injects scoped styles, samples frame performance, and exposes game-neutral lifecycle and testing controls. A future game integrates it with one call and supplies a `DebugPanelState` reader plus `DebugPanelActions`; the panel never reads game-specific state directly.
 
 The panel is docked right, collapsible, scrollable, and toggled with `Cmd+Shift+D` or `Ctrl+Shift+D`.
+
+## Feature SDK
+
+Task 003 lives in [`features`](features) and exports the complete reusable plugin contract: metadata, context, state, events, lifecycle, registry, deterministic dependency ordering, loader, serializer, and placeholder feature implementations. See [`docs/features.md`](../../docs/features.md) before adding a production feature.
