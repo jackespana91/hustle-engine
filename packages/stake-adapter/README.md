@@ -1,5 +1,5 @@
 # Stake Adapter
 
-The boundary between Stake Engine round responses and Hustle Engine's internal outcome format.
+A deliberately small boundary that validates and translates a mocked Stake-style round response into Hustle Core's engine-neutral `RoundOutcome`.
 
-Stake Engine owns operator-side sessions, wallet operations, RNG, and round APIs. This package isolates all Stake-specific translation and integration code so the rest of Hustle Engine remains operator-agnostic.
+The Task 001 schema is a local testing contract only. It must not be treated as Stake Engine's final production API. Amounts use non-negative integer micro-units and ordered event values must sum to the declared total win.

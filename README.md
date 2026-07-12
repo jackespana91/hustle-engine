@@ -34,4 +34,34 @@ Architecture decisions, boundaries, diagrams, and implementation plans live in [
 
 ## Workspace
 
-This repository is a private npm monorepo with workspaces under `apps/*` and `packages/*`. The initial structure intentionally contains no dependencies or game implementation.
+This repository is a private npm monorepo with workspaces under `apps/*` and `packages/*`.
+
+## Hustle Core Task 001
+
+Task 001 is the first reusable vertical slice: a mocked Stake-style response is validated at the adapter boundary, translated into an engine-neutral outcome, converted into a deterministic animation-command sequence, and presented through an interruptible queue. Versioned snapshots restore pending work without replaying completed commands.
+
+Amounts are integer micro-units (`1_000_000` represents one major currency unit). The mocked response schema is not presented as Stake Engine's final production API, and this slice performs no networking, wagering, RNG, RTP, or game-specific outcome logic.
+
+### Installation
+
+Requires Node.js 20 or newer and npm.
+
+```bash
+npm install
+```
+
+### Run the playground
+
+```bash
+npm run dev
+```
+
+Open the local URL printed by Vite. Use the controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures.
+
+### Validate the repository
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
