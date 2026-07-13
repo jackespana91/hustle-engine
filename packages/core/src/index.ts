@@ -11,3 +11,4 @@ export * from "./manifests/index.js";
 export * from "./features/index.js";
 export * from "./assets/index.js";
 export * from "./themes/index.js";
+export * from "./outcomes/index.js";

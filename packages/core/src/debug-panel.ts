@@ -3,6 +3,7 @@ import type { AssetDebugSnapshot } from "./assets/asset-types.js";
 import type { FeatureDebugSnapshot } from "./features/feature-debug.js";
 import type { FeatureManifestId } from "./manifests/manifest-types.js";
 import type { ThemeDebugSnapshot } from "./themes/theme-types.js";
+import type { OutcomeDebugPanelIntegration } from "./outcomes/outcome-types.js";
 
 export interface DebugPanelState {
   readonly currentState: RoundStatus;
@@ -45,6 +46,7 @@ export interface DebugPanelOptions {
   readonly title?: string;
   readonly features?: DebugPanelFeatureIntegration;
   readonly assetThemes?: DebugPanelAssetThemeIntegration;
+  readonly outcomes?: OutcomeDebugPanelIntegration;
 }
 
 /** Concise, read-only resource projection shared by every future game host. */
@@ -125,6 +127,7 @@ export class HustleDebugPanel {
       options.title ?? "HUSTLE DEBUG",
       options.features !== undefined,
       options.assetThemes !== undefined,
+      options.outcomes !== undefined,
     );
     this.panel = requireElement(this.root, ".hdebug-panel");
     (options.mount ?? document.body).append(this.root);
@@ -307,7 +310,29 @@ export class HustleDebugPanel {
     this.set("worst-frame", `${this.performance.worstFrame} ms`);
     this.renderFeatures();
     this.renderAssetThemes();
+    this.renderOutcomes();
     this.renderEvents();
+  }
+
+  private renderOutcomes(): void {
+    const integration = this.options.outcomes;
+    if (!integration) return;
+    const snapshot = integration.getState();
+    this.set("outcome-active", snapshot.activeOutcome ?? "—");
+    this.set("outcome-event-count", `${snapshot.eventCount}`);
+    this.set("outcome-current-event", snapshot.currentEvent ?? "—");
+    this.set("outcome-validation", snapshot.validationStatus);
+    this.set("outcome-playback", snapshot.playbackStatus);
+    this.set("outcome-expected-total", `${snapshot.expectedTotalMinor}`);
+    this.set("outcome-actual-total", `${snapshot.actualTotalMinor}`);
+    this.set("outcome-latest-issue", snapshot.latestWarningOrError ?? "None");
+    this.set("replay-recording", snapshot.recordingStatus);
+    this.set("replay-version", `v${snapshot.replayVersion}`);
+    this.set("replay-command-count", `${snapshot.commandCount}`);
+    this.set("replay-transition-count", `${snapshot.transitionCount}`);
+    this.set("replay-recovery-count", `${snapshot.recoveryCount}`);
+    this.set("replay-divergence", snapshot.divergenceStatus);
+    this.set("replay-first-divergence", snapshot.firstDivergence ?? "None");
   }
 
   private renderAssetThemes(): void {
@@ -404,7 +429,7 @@ export function installHustleDebugPanel(options: DebugPanelOptions): HustleDebug
   return new HustleDebugPanel(options);
 }
 
-function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes: boolean): string {
+function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes: boolean, includeOutcomes: boolean): string {
   return `
     <button class="hdebug-edge" data-debug-toggle aria-label="Toggle debug panel" aria-expanded="true"><span>DEBUG</span><b>⌘⇧D</b></button>
     <div class="hdebug-panel">
@@ -416,6 +441,7 @@ function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes
         ]))}
         ${includeFeatures ? featureSection() : ""}
         ${includeAssetThemes ? assetThemeSections() : ""}
+        ${includeOutcomes ? outcomeReplaySections() : ""}
         ${section("MEMORY", rows([["Current Snapshot", "snapshot", "pre"], ["Last Save", "last-save"], ["Recovery Version", "recovery-version"]]))}
         ${section("EVENTS", `<input data-debug-filter type="search" placeholder="Filter events" aria-label="Filter events"><div class="hdebug-event-actions">${button("toggle-stream", "Pause Event Stream")}${button("clear-events", "Clear Log")}</div><div class="hdebug-event-log" data-debug-value="event-log"></div>`)}
         ${section("ANIMATIONS", actionGrid([["pause", "Pause"], ["resume", "Resume"], ["skip", "Skip"], ["skip-all", "Skip All"], ["replay", "Replay Last Round"]]))}
@@ -426,6 +452,20 @@ function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes
         ${section("TESTING", actionGrid([["small", "Generate Small Round"], ["medium", "Generate Medium Round"], ["huge", "Generate Huge Round"], ["bad", "Generate Bad Round"], ["animation-failure", "Generate Animation Failure"], ["recovery-test", "Generate Recovery Test"]]))}
       </div>
     </div>`;
+}
+
+function outcomeReplaySections(): string {
+  return `${section("OUTCOME", rows([
+    ["Active Outcome", "outcome-active"], ["Event Count", "outcome-event-count"],
+    ["Current Event", "outcome-current-event"], ["Validation Status", "outcome-validation"],
+    ["Playback Status", "outcome-playback"], ["Expected Total", "outcome-expected-total"],
+    ["Actual Total", "outcome-actual-total"], ["Latest Warning / Error", "outcome-latest-issue", "pre"],
+  ]))}${section("REPLAY", rows([
+    ["Recording Status", "replay-recording"], ["Replay Version", "replay-version"],
+    ["Command Count", "replay-command-count"], ["Transition Count", "replay-transition-count"],
+    ["Recovery Count", "replay-recovery-count"], ["Divergence Status", "replay-divergence"],
+    ["First Divergence", "replay-first-divergence", "pre"],
+  ]))}`;
 }
 
 function assetThemeSections(): string {

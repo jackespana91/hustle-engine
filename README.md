@@ -62,6 +62,12 @@ Hustle Core resolves stable logical asset IDs into deterministic physical varian
 
 Themes are immutable token and asset-alias data composed in base, game, operator, seasonal, then accessibility order. Activation, swapping, serialization, and restoration are atomic: an invalid candidate preserves the current valid theme. Resource recovery stores identity and cache metadata only, never decoded resources or bytes. See the [`Asset and Theme System architecture guide`](docs/architecture/ASSET_THEME_SYSTEM.md).
 
+### Outcome Studio MVP
+
+Outcome Studio is Hustle Core's engine-neutral workspace and runtime for authoring, validating, playing, recording, recovering, replaying, comparing, and exporting deterministic round outcomes as data. It integrates the existing lifecycle, animation queue, typed events, Feature SDK, resource boundaries, recovery snapshots, and reusable Debug Panel without importing RouteRun or Night Drop gameplay.
+
+The Playground includes a scenario library, form-based metadata and event editing, an ordered timeline, JSON import/export, playback controls, detailed inspection, and structured first-divergence reporting. It is development infrastructure—not a certified mathematics simulator, RNG, operator tool, real Stake client, or full no-code game editor. See the [`Outcome Studio architecture guide`](docs/architecture/OUTCOME_STUDIO.md).
+
 ### Installation
 
 Requires Node.js 20 or newer and npm.
@@ -76,7 +82,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use the lifecycle controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. The **Assets & Themes** workspace demonstrates deterministic variants, preload/cancellation, cache inspection, overrides, required and optional failures, fallback, timeout, and atomic invalid swaps. Feature, asset, and theme activity is also visible in the docked Debug Panel.
+Open the local URL printed by Vite. Use **Outcome Studio** to build, validate, play, interrupt, recover, replay, compare, import, and export deterministic outcomes. The lifecycle controls complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. The **Assets & Themes** workspace demonstrates deterministic variants, preload/cancellation, cache inspection, overrides, required and optional failures, fallback, timeout, and atomic invalid swaps. Outcome, replay, feature, asset, and theme activity is also visible in the docked Debug Panel.
 
 ### Validate the repository
 

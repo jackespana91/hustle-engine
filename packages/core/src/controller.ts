@@ -44,13 +44,21 @@ export class RoundController {
   }
 
   async receiveOutcome(outcome: RoundOutcome): Promise<void> {
+    await this.receiveOutcomeWithCommands(outcome, createAnimationCommands(outcome, this.settings));
+  }
+
+  /** Presents a pre-built deterministic command plan while retaining Core lifecycle and recovery semantics. */
+  async receiveOutcomeWithCommands(
+    outcome: RoundOutcome,
+    commands: readonly AnimationCommand[],
+  ): Promise<void> {
     try {
       this.validateOutcome(outcome);
       this.outcomeValue = outcome;
       this.transition("received");
       this.events.publish("round:received", { outcome });
       this.queue.clear();
-      this.queue.enqueueMany(createAnimationCommands(outcome, this.settings));
+      this.queue.enqueueMany(commands);
       this.transition("presenting");
       await this.queue.play();
       if (this.state === "presenting") {

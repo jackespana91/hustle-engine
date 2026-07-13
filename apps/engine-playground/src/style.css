@@ -1,7 +1,7 @@
 :root { font-family: Inter, system-ui, sans-serif; color: #e8edf5; background: #0d1117; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
-main { width: min(1180px, 100%); margin: 0 auto; padding: 24px; }
+main { width: min(1540px, 100%); margin: 0 auto; padding: 24px; }
 h1, h2 { margin: 0 0 12px; }
 .subtitle { color: #99a7ba; margin-top: -4px; }
 .dashboard { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
@@ -18,7 +18,7 @@ button.primary { background: #176b5d; border-color: #55d6be; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .panel pre { min-height: 110px; max-height: 240px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; color: #b8c4d6; }
 .error { color: #ff8d8d; }
-@media (max-width: 760px) { .dashboard { grid-template-columns: repeat(2, 1fr); } .grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { main { padding: 14px; } .dashboard { grid-template-columns: repeat(2, 1fr); } .grid { grid-template-columns: 1fr; } }
 .feature-debug { margin-top: 22px; border: 1px solid #2c3646; border-radius: 12px; background: #101620; overflow: hidden; }
 .feature-debug-header { display: flex; justify-content: space-between; gap: 20px; padding: 20px; border-bottom: 1px solid #2c3646; background: #151d29; }
 .feature-debug-header span { color: #55d6be; font-size: 10px; font-weight: 800; letter-spacing: .18em; }

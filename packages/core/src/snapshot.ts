@@ -42,6 +42,15 @@ export function parseSnapshot(serialized: string): RecoverySnapshot {
       throw new CorruptedSnapshotError("Snapshot contains invalid theme recovery data");
     }
   }
+  if (value.outcomeRuntime !== undefined) {
+    const outcome = value.outcomeRuntime;
+    if (!isRecord(outcome) || outcome.schemaVersion !== 1 || typeof outcome.outcomeId !== "string" ||
+        typeof outcome.outcomeSchemaVersion !== "string" || !Number.isSafeInteger(outcome.currentEventIndex) ||
+        !Array.isArray(outcome.completedEventIds) || !Array.isArray(outcome.pendingEventIds) ||
+        !Number.isSafeInteger(outcome.logicalTick)) {
+      throw new CorruptedSnapshotError("Snapshot contains invalid Outcome Studio recovery data");
+    }
+  }
   return value as unknown as RecoverySnapshot;
 }
 

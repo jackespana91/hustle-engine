@@ -27,3 +27,11 @@ Controls cover:
 - registry metadata export, cache clearing, and a full workspace reset.
 
 Asset and theme summaries also appear in the docked Debug Panel. All example visual content is non-production placeholder data. See [`ASSET_THEME_SYSTEM.md`](../../docs/architecture/ASSET_THEME_SYSTEM.md) for deterministic resolution, ownership and recovery rules.
+
+## Outcome Studio
+
+The prominent **Outcome Studio** workspace lets a user create or duplicate an engine-neutral outcome, edit metadata and ordered events with forms, import or export stable JSON, validate the document, and exercise deterministic play, pause, resume, skip, interrupt, recover, and replay behavior without changing source code.
+
+The Inspector exposes validation, expected and actual state, feature executions, animation commands, transitions, replay comparison, and first divergence. The Playback Console shows live lifecycle, event, animation, queue, logical tick, progress, logs, warnings, and errors. Concise OUTCOME and REPLAY summaries also appear in the docked Debug Panel.
+
+Scenarios are illustrative development fixtures only. They do not generate certified outcomes, call a real Stake API, implement a commercial mechanic, or contain final game art. See [`OUTCOME_STUDIO.md`](../../docs/architecture/OUTCOME_STUDIO.md).

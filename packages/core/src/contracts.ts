@@ -77,6 +77,8 @@ export interface RecoverySnapshot {
   readonly featureRuntime?: import("./features/feature-types.js").FeatureRuntimeSnapshot;
   /** Optional resource metadata only. Cached values, decoded resources and bytes are never serialized. */
   readonly resourceRuntime?: ResourceRuntimeSnapshot;
+  /** Optional Outcome Studio position and replay metadata captured at the same queue boundary. */
+  readonly outcomeRuntime?: import("./outcomes/outcome-types.js").OutcomeRuntimeSnapshot;
 }
 
 export interface ResourceRuntimeSnapshot {

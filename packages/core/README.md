@@ -33,3 +33,9 @@ The [`assets`](src/assets) module owns logical resource contracts, deterministic
 The [`themes`](src/themes) module owns validated immutable theme data, safe token and alias resolution, base/game/operator/seasonal/accessibility composition, conflict inspection, atomic activation and swapping, versioned state restore, typed events, and a DOM-free debug adapter.
 
 Core never fetches through a browser API, creates DOM/Pixi resources, emits arbitrary CSS, or contains final game artwork. Hosts inject the loading/decoding adapter and rendering interpretation. Read [`ASSET_THEME_SYSTEM.md`](../../docs/architecture/ASSET_THEME_SYSTEM.md) before adding production assets or themes.
+
+## Outcome Studio
+
+The [`outcomes`](src/outcomes) module treats round outcomes as strongly typed, versioned data. It provides structured validation and normalization, a transactional builder, an atomic registry, deterministic playback through the existing controller and animation queue, Feature SDK hooks, recovery extensions, complete execution recording, offline replay, stable serialization, comparison, divergence reporting, scenarios, typed events, and a DOM-free Debug Panel adapter.
+
+Core does not generate real-money results or understand RouteRun, Night Drop, operator wallets, or certified mathematics. Hosts supply resource preparation and animation execution; commercial engines later interpret outcome events for mechanic-specific presentation. Read [`OUTCOME_STUDIO.md`](../../docs/architecture/OUTCOME_STUDIO.md) for the contract and certification boundary.

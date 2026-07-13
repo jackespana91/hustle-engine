@@ -8,6 +8,8 @@ The [`Hustle Feature SDK`](FEATURE_SDK.md) guide documents manifest-backed plugi
 
 The [`Asset and Theme System`](ASSET_THEME_SYSTEM.md) guide documents logical asset IDs, deterministic variants, host loading adapters, preload and cache policy, composable theme tokens, atomic swaps, and metadata-only recovery.
 
+The [`Outcome Studio MVP`](OUTCOME_STUDIO.md) guide documents outcomes as versioned data, deterministic validation and playback, transactional authoring, recording, replay, recovery snapshots, and structured divergence reporting.
+
 ## Task 001 data flow
 
 ```text
@@ -48,6 +50,12 @@ engine-playground       -- rectangles, counters and text only
 Interrupting aborts the active executor and places its command at the front of the pending queue because completion is not known. A snapshot captures completed, current, and pending commands plus round state, transition history, and presentation progress. Restoration validates version and structure, retains completed commands for inspection, and plays only current/pending work.
 
 Reusable mechanic logic must never be implemented inside a game pack.
+
+## Outcome Studio boundary
+
+Outcome Studio validates and presents deterministic outcome data. It composes the existing lifecycle, queue, Feature SDK, resource boundaries, snapshots, and event bus without learning a commercial mechanic. A future certified mathematics system may produce outcomes, and a future commercial engine may interpret generic event payloads for presentation; neither responsibility belongs to Outcome Studio.
+
+Replay records preserve observable execution order and logical timing. Recovery snapshots retain completed work for inspection while resuming only active and pending work. Structured comparisons expose the first event, animation, feature, transition, or final-state divergence.
 
 ## Asset and theme boundary
 
