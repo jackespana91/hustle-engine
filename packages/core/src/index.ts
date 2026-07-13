@@ -7,4 +7,5 @@ export * from "./errors.js";
 export * from "./event-bus.js";
 export * from "./snapshot.js";
 export * from "./state-machine.js";
+export * from "./manifests/index.js";
 export * from "../features/index.js";

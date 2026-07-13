@@ -2,6 +2,8 @@
 
 This directory records Hustle Engine architecture decisions, package boundaries, diagrams, and implementation plans.
 
+The [`Engine Manifest System`](MANIFEST_SYSTEM.md) guide documents versioned engine and game composition, validation, deterministic resolution, transactional reloads, and schema evolution.
+
 ## Task 001 data flow
 
 ```text

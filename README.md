@@ -50,6 +50,10 @@ Hustle Core exports a reusable, game-neutral debug panel for every future browse
 
 The Feature SDK provides deterministic plugin registration, engine compatibility discovery, dependency validation, lifecycle execution, enable/disable controls, and versioned state serialization. Six demo feature classes are placeholders only. See [`docs/features.md`](docs/features.md) for the authoring contract and integration rules.
 
+### Engine Manifest System
+
+The Manifest System describes commercial engines, game packs, feature packs, themes, audio packs, math profiles, and assets as validated versioned data. Run `npm run dev`, open the Vite URL, and use the **Manifest System** workspace to load examples, inspect validation errors, export a stable snapshot, and resolve the illustrative Night Drop composition.
+
 ### Installation
 
 Requires Node.js 20 or newer and npm.

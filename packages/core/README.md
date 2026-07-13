@@ -15,3 +15,9 @@ The panel is docked right, collapsible, scrollable, and toggled with `Cmd+Shift+
 ## Feature SDK
 
 Task 003 lives in [`features`](features) and exports the complete reusable plugin contract: metadata, context, state, events, lifecycle, registry, deterministic dependency ordering, loader, serializer, and placeholder feature implementations. See [`docs/features.md`](../../docs/features.md) before adding a production feature.
+
+## Engine Manifest System
+
+The [`manifests`](src/manifests) module provides the data-only composition boundary for engines, games, reusable features, themes, audio, illustrative math profiles, and assets. It includes runtime validation, deterministic game resolution, stable JSON serialization, transactional development reloads, schema migration contracts, and typed lifecycle events.
+
+Manifest declarations never contain gameplay, animation, RNG, wagering, rendering, or audio playback logic. See [`MANIFEST_SYSTEM.md`](../../docs/architecture/MANIFEST_SYSTEM.md) for the complete contract and the certification limits of math metadata.

@@ -21,6 +21,7 @@ import {
   type MockStakeRoundResponse,
 } from "@hustle/stake-adapter";
 import "./style.css";
+import { mountManifestDebug } from "./manifest-debug.js";
 
 const MOCK_RESPONSE: MockStakeRoundResponse = {
   roundId: "mock-round-001",
@@ -59,7 +60,7 @@ if (!root) throw new Error("Missing playground root");
 
 root.innerHTML = `
   <h1>Hustle Engine Playground</h1>
-  <p class="subtitle">Tasks 001–003 · deterministic lifecycle · reusable feature tooling</p>
+  <p class="subtitle">Deterministic lifecycle · debug tooling · features · manifests</p>
   <section class="dashboard">
     <div class="metric"><span>Lifecycle</span><strong id="state">idle</strong></div>
     <div class="metric"><span>Balance</span><strong id="balance">—</strong></div>
@@ -105,7 +106,8 @@ root.innerHTML = `
         <article><h3>Loaded state</h3><pre id="feature-loaded"></pre></article>
       </div>
     </div>
-  </section>`;
+  </section>
+  <div id="manifest-debug-root"></div>`;
 
 const featureContext = createFeatureContext({
   engineId: "playground",
@@ -171,6 +173,9 @@ debugPanel = installHustleDebugPanel({
   },
   title: "DEBUG PANEL",
 });
+const manifestMount = document.querySelector<HTMLElement>("#manifest-debug-root");
+if (!manifestMount) throw new Error("Missing manifest debug mount");
+mountManifestDebug(manifestMount, { onEvent: (name, payload) => debugPanel?.recordEvent(name, payload) });
 populateEngineFilter();
 renderFeatureDebug();
 render();

@@ -5,3 +5,5 @@ Minimal browser demonstration for Hustle Core Tasks 001–003. It uses rectangle
 Run from the repository root with `npm run dev`, then open the Vite URL shown in the terminal. The debug panel is docked on the right and toggles with `Cmd+Shift+D` or `Ctrl+Shift+D`. No real wallet, network, RNG, or final game artwork is involved.
 
 The Feature SDK Debug section lists registered placeholder features, deterministic execution order, full metadata, serialized/loaded state, enable toggles, text search, and engine compatibility filtering.
+
+The Manifest System section loads non-production composition examples, displays registered manifest metadata and structured errors, exports stable registry snapshots, and resolves the illustrative Night Drop composition without implementing game logic.
