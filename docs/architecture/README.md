@@ -10,6 +10,8 @@ The [`Asset and Theme System`](ASSET_THEME_SYSTEM.md) guide documents logical as
 
 The [`Outcome Studio MVP`](OUTCOME_STUDIO.md) guide documents outcomes as versioned data, deterministic validation and playback, transactional authoring, recording, replay, recovery snapshots, and structured divergence reporting.
 
+The [`RouteRun Engine 001`](../engines/ROUTERUN.md) guide documents the reusable board, tile grammar, deterministic route solver, Runner, overlays, clearing, cascades/refill, expansion, Feature SDK hooks, Outcome Studio adapter, animation commands, and recovery boundary.
+
 ## Task 001 data flow
 
 ```text
@@ -42,7 +44,7 @@ engine-playground       -- rectangles, counters and text only
 - Animation commands are serializable data. UI-specific execution remains outside core.
 - Recovery snapshots are versioned. Completed commands remain recorded and are never returned to the pending queue.
 - Money uses non-negative safe integer micro-units. No floating-point currency assumptions are allowed.
-- RouteRun remains a future reusable mechanic package and is not implemented by Task 001.
+- RouteRun is implemented separately by Task 006 as a reusable mechanic package; it does not change Task 001's platform boundary.
 - Night Drop remains a future consumer game pack and contains no Task 001 logic.
 
 ## Recovery semantics

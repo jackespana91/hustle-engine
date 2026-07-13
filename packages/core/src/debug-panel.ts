@@ -47,6 +47,29 @@ export interface DebugPanelOptions {
   readonly features?: DebugPanelFeatureIntegration;
   readonly assetThemes?: DebugPanelAssetThemeIntegration;
   readonly outcomes?: OutcomeDebugPanelIntegration;
+  readonly routerun?: DebugPanelRouteRunIntegration;
+}
+
+/** Engine-neutral projection; packages/routerun supplies the concrete adapter. */
+export interface DebugPanelRouteRunSnapshot {
+  readonly engineVersion: string;
+  readonly phase: string;
+  readonly boardSize: string;
+  readonly activeCells: number;
+  readonly runnerPosition: string;
+  readonly routeLength: number;
+  readonly currentStep: number;
+  readonly overlaysCollected: number;
+  readonly cascadeCount: number;
+  readonly expansionCount: number;
+  readonly terminalReason: string;
+  readonly currentSnapshotVersion: number;
+  readonly latestEvent: string;
+  readonly latestIssue: string;
+}
+
+export interface DebugPanelRouteRunIntegration {
+  readonly getState: () => DebugPanelRouteRunSnapshot;
 }
 
 /** Concise, read-only resource projection shared by every future game host. */
@@ -128,6 +151,7 @@ export class HustleDebugPanel {
       options.features !== undefined,
       options.assetThemes !== undefined,
       options.outcomes !== undefined,
+      options.routerun !== undefined,
     );
     this.panel = requireElement(this.root, ".hdebug-panel");
     (options.mount ?? document.body).append(this.root);
@@ -311,7 +335,28 @@ export class HustleDebugPanel {
     this.renderFeatures();
     this.renderAssetThemes();
     this.renderOutcomes();
+    this.renderRouteRun();
     this.renderEvents();
+  }
+
+  private renderRouteRun(): void {
+    const integration = this.options.routerun;
+    if (!integration) return;
+    const snapshot = integration.getState();
+    this.set("routerun-version", snapshot.engineVersion);
+    this.set("routerun-phase", snapshot.phase);
+    this.set("routerun-board", snapshot.boardSize);
+    this.set("routerun-active", `${snapshot.activeCells}`);
+    this.set("routerun-runner", snapshot.runnerPosition);
+    this.set("routerun-route-length", `${snapshot.routeLength}`);
+    this.set("routerun-current-step", `${snapshot.currentStep}`);
+    this.set("routerun-overlays", `${snapshot.overlaysCollected}`);
+    this.set("routerun-cascades", `${snapshot.cascadeCount}`);
+    this.set("routerun-expansions", `${snapshot.expansionCount}`);
+    this.set("routerun-terminal", snapshot.terminalReason);
+    this.set("routerun-snapshot", `v${snapshot.currentSnapshotVersion}`);
+    this.set("routerun-event", snapshot.latestEvent);
+    this.set("routerun-issue", snapshot.latestIssue);
   }
 
   private renderOutcomes(): void {
@@ -429,7 +474,7 @@ export function installHustleDebugPanel(options: DebugPanelOptions): HustleDebug
   return new HustleDebugPanel(options);
 }
 
-function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes: boolean, includeOutcomes: boolean): string {
+function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes: boolean, includeOutcomes: boolean, includeRouteRun: boolean): string {
   return `
     <button class="hdebug-edge" data-debug-toggle aria-label="Toggle debug panel" aria-expanded="true"><span>DEBUG</span><b>⌘⇧D</b></button>
     <div class="hdebug-panel">
@@ -442,6 +487,7 @@ function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes
         ${includeFeatures ? featureSection() : ""}
         ${includeAssetThemes ? assetThemeSections() : ""}
         ${includeOutcomes ? outcomeReplaySections() : ""}
+        ${includeRouteRun ? routeRunSection() : ""}
         ${section("MEMORY", rows([["Current Snapshot", "snapshot", "pre"], ["Last Save", "last-save"], ["Recovery Version", "recovery-version"]]))}
         ${section("EVENTS", `<input data-debug-filter type="search" placeholder="Filter events" aria-label="Filter events"><div class="hdebug-event-actions">${button("toggle-stream", "Pause Event Stream")}${button("clear-events", "Clear Log")}</div><div class="hdebug-event-log" data-debug-value="event-log"></div>`)}
         ${section("ANIMATIONS", actionGrid([["pause", "Pause"], ["resume", "Resume"], ["skip", "Skip"], ["skip-all", "Skip All"], ["replay", "Replay Last Round"]]))}
@@ -452,6 +498,16 @@ function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes
         ${section("TESTING", actionGrid([["small", "Generate Small Round"], ["medium", "Generate Medium Round"], ["huge", "Generate Huge Round"], ["bad", "Generate Bad Round"], ["animation-failure", "Generate Animation Failure"], ["recovery-test", "Generate Recovery Test"]]))}
       </div>
     </div>`;
+}
+
+function routeRunSection(): string {
+  return section("ROUTERUN", rows([
+    ["Engine Version", "routerun-version"], ["Phase", "routerun-phase"], ["Board Size", "routerun-board"],
+    ["Active Cells", "routerun-active"], ["Runner Position", "routerun-runner"], ["Route Length", "routerun-route-length"],
+    ["Current Step", "routerun-current-step"], ["Overlays Collected", "routerun-overlays"], ["Cascade Count", "routerun-cascades"],
+    ["Expansion Count", "routerun-expansions"], ["Terminal Reason", "routerun-terminal"], ["Snapshot Version", "routerun-snapshot"],
+    ["Latest RouteRun Event", "routerun-event"], ["Latest Error / Warning", "routerun-issue", "pre"],
+  ]));
 }
 
 function outcomeReplaySections(): string {

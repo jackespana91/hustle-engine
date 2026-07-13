@@ -15,6 +15,7 @@
     "skipLibCheck": true,
     "paths": {
       "@hustle/core": ["./packages/core/src/index.ts"],
+      "@hustle/routerun": ["./packages/routerun/src/index.ts"],
       "@hustle/stake-adapter": ["./packages/stake-adapter/src/index.ts"]
     }
   },

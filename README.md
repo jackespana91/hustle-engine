@@ -16,7 +16,9 @@ Stake Engine remains responsible for operator-side sessions, wallet operations, 
 
 ### RouteRun Engine 001
 
-[`packages/routerun`](packages/routerun) is the first commercial reusable engine built on Hustle Core. It provides the directional route mechanic, including its board model, route grammar, deterministic traversal, overlays, cascades, expansion, persistent bonus state, and feature plugins.
+[`packages/routerun`](packages/routerun) is the first commercial reusable engine built on Hustle Core. Task 006 implements its working Core MVP: configurable rectangular boards, explicit route grammar, deterministic junction resolution and traversal, Runner state, generic overlays, ordered clearing, four-direction cascades with injected refill data, expansion, Feature SDK hooks, Outcome Studio translation, data-only animation commands, manifest identity, debug inspection, and versioned recovery.
+
+Run the Playground and open **RouteRun Engine 001** to explore 15 non-production scenarios, step through complete route previews, clear and cascade boards, apply a sealed-side expansion, interrupt/recover movement, and replay RouteRun events in Outcome Studio. See the [RouteRun architecture guide](docs/engines/ROUTERUN.md).
 
 ### Night Drop Game Pack 001
 
@@ -82,7 +84,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use **Outcome Studio** to build, validate, play, interrupt, recover, replay, compare, import, and export deterministic outcomes. The lifecycle controls complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. The **Assets & Themes** workspace demonstrates deterministic variants, preload/cancellation, cache inspection, overrides, required and optional failures, fallback, timeout, and atomic invalid swaps. Outcome, replay, feature, asset, and theme activity is also visible in the docked Debug Panel.
+Open the local URL printed by Vite. **RouteRun Engine 001** is the prominent diagnostic workspace for route preview, step/play, interruption, snapshots, clearing, cascades, expansion, continuation, and Outcome Studio handoff. Use **Outcome Studio** to build, validate, play, interrupt, recover, replay, compare, import, and export deterministic outcomes. The **Features** workspace loads and inspects placeholder plugins, and **Assets & Themes** demonstrates deterministic variants and atomic theme composition. RouteRun, outcome, replay, feature, asset, and theme activity is also visible in the docked Debug Panel.
 
 ### Validate the repository
 

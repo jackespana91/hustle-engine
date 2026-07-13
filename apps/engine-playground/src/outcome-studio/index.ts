@@ -116,6 +116,26 @@ export class OutcomeStudioView {
     this.element.remove();
   }
 
+  /** Loads an engine adapter outcome without moving RouteRun logic into Core. */
+  async loadExternalOutcome(outcome: OutcomeDefinition, autoplay = false): Promise<void> {
+    this.clearPlayer();
+    this.activeScenarioId = "external-engine-outcome";
+    if (!isDefinition(outcome)) throw new Error("External engine outcome is malformed");
+    this.activeOutcome = structuredClone(outcome);
+    this.selectedEventId = this.activeOutcome.events[0]?.id ?? null;
+    this.validation = this.validator.validate(this.activeOutcome);
+    this.rawJson = serializeOutcome(this.activeOutcome, true);
+    this.lastRecord = null;
+    this.lastResult = null;
+    this.comparison = null;
+    this.snapshot = null;
+    this.status = `Loaded external ${this.activeOutcome.engineId} outcome with ${this.activeOutcome.events.length} event(s).`;
+    this.tone = this.validation.valid ? "success" : "error";
+    this.log(`external · ${this.activeOutcome.id}`);
+    this.render();
+    if (autoplay && this.validation.valid) await this.play();
+  }
+
   private bind(): void {
     this.element.addEventListener("click", (event) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>("[data-outcome-action]");

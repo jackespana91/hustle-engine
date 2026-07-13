@@ -16,7 +16,9 @@ export interface ManifestValidationResult {
 }
 
 const TYPES: readonly ManifestType[] = ["engine", "game", "feature", "theme", "audio", "math", "asset"];
-const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+// Namespaced platform manifests may use stable dotted identities such as
+// `engine.routerun`; legacy hyphenated identities remain valid.
+const ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const LOCALE = /^[a-z]{2,3}(?:-[A-Z]{2}|-[0-9]{3})?$/;
 const ENGINE_STATUSES = ["experimental", "development", "production", "deprecated"] as const;
 const PLATFORMS = ["web", "mobile-web", "desktop-web"] as const;

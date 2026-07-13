@@ -20,6 +20,7 @@ import { mountAssetThemeDebug } from "./asset-theme-debug.js";
 import { mountFeatureDebug } from "./feature-debug.js";
 import { mountManifestDebug } from "./manifest-debug.js";
 import { mountOutcomeStudio } from "./outcome-studio/index.js";
+import { mountRouteRunDebug } from "./routerun-debug.js";
 
 const MOCK_RESPONSE: MockStakeRoundResponse = {
   roundId: "mock-round-001",
@@ -52,7 +53,7 @@ if (!root) throw new Error("Missing playground root");
 
 root.innerHTML = `
   <h1>Hustle Engine Playground</h1>
-  <p class="subtitle">Deterministic outcomes · replay · lifecycle · features · manifests · assets · themes</p>
+  <p class="subtitle">Deterministic routes · outcomes · replay · lifecycle · features · manifests · assets · themes</p>
   <section class="dashboard">
     <div class="metric"><span>Lifecycle</span><strong id="state">idle</strong></div>
     <div class="metric"><span>Balance</span><strong id="balance">—</strong></div>
@@ -76,6 +77,7 @@ root.innerHTML = `
     <div class="panel"><h2>Transition history</h2><pre id="history"></pre></div>
     <div class="panel"><h2>Event log</h2><pre id="events"></pre></div>
   </section>
+  <div id="routerun-debug-root"></div>
   <div id="outcome-studio-root"></div>
   <div id="feature-debug-root"></div>
   <div id="manifest-debug-root"></div>
@@ -100,6 +102,12 @@ const outcomeStudioMount = document.querySelector<HTMLElement>("#outcome-studio-
 if (!outcomeStudioMount) throw new Error("Missing Outcome Studio mount");
 const outcomeStudioView = mountOutcomeStudio(outcomeStudioMount, {
   onEvent: (name, payload) => debugPanel?.recordEvent(name, payload),
+});
+const routeRunMount = document.querySelector<HTMLElement>("#routerun-debug-root");
+if (!routeRunMount) throw new Error("Missing RouteRun debug mount");
+const routeRunView = mountRouteRunDebug(routeRunMount, {
+  onEvent: (name, payload) => debugPanel?.recordEvent(name, payload),
+  onReplayOutcome: (outcome) => outcomeStudioView.loadExternalOutcome(outcome, true),
 });
 const featureMount = document.querySelector<HTMLElement>("#feature-debug-root");
 if (!featureMount) throw new Error("Missing feature debug mount");
@@ -154,6 +162,7 @@ debugPanel = installHustleDebugPanel({
   features: featureView.debugPanelIntegration,
   assetThemes: assetThemeView.debugPanelIntegration,
   outcomes: outcomeStudioView.debugPanelIntegration,
+  routerun: routeRunView.debugPanelIntegration,
   title: "DEBUG PANEL",
 });
 void featureView.loadExamples();

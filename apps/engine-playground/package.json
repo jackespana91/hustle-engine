@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@hustle/core": "0.1.0",
+    "@hustle/routerun": "0.1.0",
     "@hustle/stake-adapter": "0.1.0"
   },
   "scripts": {
