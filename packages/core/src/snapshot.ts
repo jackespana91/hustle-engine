@@ -29,6 +29,19 @@ export function parseSnapshot(serialized: string): RecoverySnapshot {
       value.featureRuntime.schemaVersion !== 1 || !Array.isArray(value.featureRuntime.features))) {
     throw new CorruptedSnapshotError("Snapshot contains invalid Feature SDK recovery data");
   }
+  if (value.resourceRuntime !== undefined) {
+    if (!isRecord(value.resourceRuntime)) throw new CorruptedSnapshotError("Snapshot contains invalid resource recovery data");
+    const assets = value.resourceRuntime.assets;
+    const theme = value.resourceRuntime.theme;
+    if (assets !== undefined && (!isRecord(assets) || assets.schemaVersion !== 1 ||
+        !Array.isArray(assets.resolvedAssets) || !isRecord(assets.cache))) {
+      throw new CorruptedSnapshotError("Snapshot contains invalid asset recovery data");
+    }
+    if (theme !== undefined && (!isRecord(theme) || theme.schemaVersion !== 1 ||
+        !Array.isArray(theme.activeThemeIds))) {
+      throw new CorruptedSnapshotError("Snapshot contains invalid theme recovery data");
+    }
+  }
   return value as unknown as RecoverySnapshot;
 }
 

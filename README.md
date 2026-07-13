@@ -56,6 +56,12 @@ The six included feature implementations are non-production architectural exampl
 
 The Manifest System describes commercial engines, game packs, feature packs, themes, audio packs, math profiles, and assets as validated versioned data. Run `npm run dev`, open the Vite URL, and use the **Manifest System** workspace to load examples, inspect validation errors, export a stable snapshot, and resolve the illustrative Night Drop composition.
 
+### Asset and Theme System
+
+Hustle Core resolves stable logical asset IDs into deterministic physical variants using host-supplied platform, viewport, density, orientation, locale, motion, quality, and memory conditions. An environment-neutral loader boundary supplies cancellation, timeouts, retry policy, concurrent-request deduplication, preload progress, structured required/optional failure behavior, and an estimated-byte LRU cache without depending on DOM or PixiJS resources.
+
+Themes are immutable token and asset-alias data composed in base, game, operator, seasonal, then accessibility order. Activation, swapping, serialization, and restoration are atomic: an invalid candidate preserves the current valid theme. Resource recovery stores identity and cache metadata only, never decoded resources or bytes. See the [`Asset and Theme System architecture guide`](docs/architecture/ASSET_THEME_SYSTEM.md).
+
 ### Installation
 
 Requires Node.js 20 or newer and npm.
@@ -70,7 +76,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use the lifecycle controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. Feature activity is also visible in the docked Debug Panel.
+Open the local URL printed by Vite. Use the lifecycle controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. The **Assets & Themes** workspace demonstrates deterministic variants, preload/cancellation, cache inspection, overrides, required and optional failures, fallback, timeout, and atomic invalid swaps. Feature, asset, and theme activity is also visible in the docked Debug Panel.
 
 ### Validate the repository
 

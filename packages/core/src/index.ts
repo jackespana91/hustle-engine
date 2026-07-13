@@ -9,3 +9,5 @@ export * from "./snapshot.js";
 export * from "./state-machine.js";
 export * from "./manifests/index.js";
 export * from "./features/index.js";
+export * from "./assets/index.js";
+export * from "./themes/index.js";

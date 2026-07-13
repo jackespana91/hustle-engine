@@ -6,6 +6,8 @@ The [`Engine Manifest System`](MANIFEST_SYSTEM.md) guide documents versioned eng
 
 The [`Hustle Feature SDK`](FEATURE_SDK.md) guide documents manifest-backed plugins, controlled execution, dependency and conflict handling, deterministic ordering, failure isolation, recovery, state migrations, and commercial-engine integration.
 
+The [`Asset and Theme System`](ASSET_THEME_SYSTEM.md) guide documents logical asset IDs, deterministic variants, host loading adapters, preload and cache policy, composable theme tokens, atomic swaps, and metadata-only recovery.
+
 ## Task 001 data flow
 
 ```text
@@ -46,6 +48,14 @@ engine-playground       -- rectangles, counters and text only
 Interrupting aborts the active executor and places its command at the front of the pending queue because completion is not known. A snapshot captures completed, current, and pending commands plus round state, transition history, and presentation progress. Restoration validates version and structure, retains completed commands for inspection, and plays only current/pending work.
 
 Reusable mechanic logic must never be implemented inside a game pack.
+
+## Asset and theme boundary
+
+Games and reusable engines request logical asset IDs. Core resolves those IDs from manifest-backed registries using runtime conditions supplied by the host; it never guesses from a user agent or constructs DOM/Pixi resources. Physical fetching and decoding stays behind an adapter.
+
+Theme definitions remain immutable data. Resolution applies base, game, operator, seasonal, then accessibility layers. A complete candidate is resolved before activation or swapping, so an invalid theme never replaces the current valid composition.
+
+Resource snapshots contain registry identity, resolved physical identity, estimated cache metadata, preload state, theme selection and stable hashes only. They never serialize decoded resources or resource bytes.
 
 ## Feature SDK boundary
 

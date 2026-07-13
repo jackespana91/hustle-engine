@@ -16,6 +16,7 @@ import {
   type MockStakeRoundResponse,
 } from "@hustle/stake-adapter";
 import "./style.css";
+import { mountAssetThemeDebug } from "./asset-theme-debug.js";
 import { mountFeatureDebug } from "./feature-debug.js";
 import { mountManifestDebug } from "./manifest-debug.js";
 
@@ -50,7 +51,7 @@ if (!root) throw new Error("Missing playground root");
 
 root.innerHTML = `
   <h1>Hustle Engine Playground</h1>
-  <p class="subtitle">Deterministic lifecycle · debug tooling · features · manifests</p>
+  <p class="subtitle">Deterministic lifecycle · debug tooling · features · manifests · assets · themes</p>
   <section class="dashboard">
     <div class="metric"><span>Lifecycle</span><strong id="state">idle</strong></div>
     <div class="metric"><span>Balance</span><strong id="balance">—</strong></div>
@@ -75,7 +76,8 @@ root.innerHTML = `
     <div class="panel"><h2>Event log</h2><pre id="events"></pre></div>
   </section>
   <div id="feature-debug-root"></div>
-  <div id="manifest-debug-root"></div>`;
+  <div id="manifest-debug-root"></div>
+  <div id="asset-theme-debug-root"></div>`;
 
 class PlaygroundExecutor implements AnimationExecutor {
   async execute(command: AnimationCommand, context: AnimationExecutionContext): Promise<void> {
@@ -95,6 +97,12 @@ wireEvents();
 const featureMount = document.querySelector<HTMLElement>("#feature-debug-root");
 if (!featureMount) throw new Error("Missing feature debug mount");
 const featureView = mountFeatureDebug(featureMount, {
+  loadExamplesOnMount: false,
+  onEvent: (name, payload) => debugPanel?.recordEvent(name, payload),
+});
+const assetThemeMount = document.querySelector<HTMLElement>("#asset-theme-debug-root");
+if (!assetThemeMount) throw new Error("Missing asset and theme debug mount");
+const assetThemeView = mountAssetThemeDebug(assetThemeMount, {
   loadExamplesOnMount: false,
   onEvent: (name, payload) => debugPanel?.recordEvent(name, payload),
 });
@@ -137,9 +145,11 @@ debugPanel = installHustleDebugPanel({
     generateRecoveryTest: runRecoveryTest,
   },
   features: featureView.debugPanelIntegration,
+  assetThemes: assetThemeView.debugPanelIntegration,
   title: "DEBUG PANEL",
 });
-featureView.loadExamples();
+void featureView.loadExamples();
+void assetThemeView.loadExamples();
 const manifestMount = document.querySelector<HTMLElement>("#manifest-debug-root");
 if (!manifestMount) throw new Error("Missing manifest debug mount");
 mountManifestDebug(manifestMount, { onEvent: (name, payload) => debugPanel?.recordEvent(name, payload) });

@@ -16,11 +16,15 @@ The system is infrastructure only. A manifest can declare that a feature is sele
 - `MathManifest` contains descriptive configuration metadata expressed with integer basis points. It is not a mathematics engine.
 - `AssetManifest` lists relative asset files, checksums, tags, and preload/optional groups.
 
+Asset files may also declare optional estimated byte hints, deterministic physical variants, and a logical fallback ID. These fields extend schema 1 without invalidating the original manifests. The executable loading, caching, retry and resolution behavior remains in the [`Asset and Theme System`](ASSET_THEME_SYSTEM.md), not in manifest data.
+
 Every registered manifest also carries a `manifestType` discriminator, schema version, permanent lowercase kebab-case ID, semantic implementation version, name and metadata.
 
 ## Game composition
 
 `ManifestRegistry.resolveGame()` follows the references in a `GameManifest` and returns the full engine, transitive feature set, theme, audio, math profile and asset pack. Resolution performs compatibility checks and returns a structured report and warnings.
+
+The resolved composition also exposes the theme-referenced asset pack and stable `bootstrap`/`base-game` preload IDs. This prevents a host from silently ignoring a distinct theme asset pack and gives the resource bootstrap enough validated data without moving loading behavior into the Manifest System.
 
 Feature order is deterministic:
 
@@ -55,6 +59,8 @@ Manifest implementation versions and schema versions serve different purposes:
 ## Registration for future engines and games
 
 Future packages export data-only manifests and register them through `ManifestLoader` or `ManifestRegistry.registerMany()`. Related manifests should be loaded as one batch so references and dependencies are validated atomically. Production packages must use permanent IDs and should test resolution against their supported Core and commercial-engine versions.
+
+After composition resolution, a host passes the resolved asset and theme data into the dedicated registries. See [`ASSET_THEME_SYSTEM.md`](ASSET_THEME_SYSTEM.md) for initialization order, variant resolution, preload policy, theme inheritance and recovery boundaries.
 
 The registry supports typed lookup, filtering by manifest type or compatible engine, defensive snapshots, stable serialization, unregistering and explicit safe replacement.
 

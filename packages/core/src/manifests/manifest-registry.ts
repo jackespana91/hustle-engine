@@ -130,12 +130,18 @@ export class ManifestRegistry {
       const audio = requireType(this.require(game.audioManifestId), "audio", "audioManifestId");
       const mathProfile = requireType(this.require(game.mathManifestId), "math", "mathManifestId");
       const assets = requireType(this.require(game.assetManifestId), "asset", "assetManifestId");
+      const themeAssets = requireType(this.require(theme.assetManifestId), "asset", "theme.assetManifestId");
       const features = this.resolveFeatures(game.featureIds.map(String));
       const compatibilityReport = checkGameCompatibility(game, engine, features, theme, audio, mathProfile);
       if (!compatibilityReport.compatible) throw new ManifestSystemError(compatibilityReport.errors);
       const warnings = [...compatibilityReport.warnings];
-      if (theme.assetManifestId !== assets.id) warnings.push(`Theme ${theme.id} references asset manifest ${theme.assetManifestId}; game uses ${assets.id}.`);
-      const composition: ResolvedGameComposition = { game, engine, features, theme, audio, mathProfile, assets, compatibilityReport, warnings };
+      if (theme.assetManifestId !== assets.id) warnings.push(`Theme ${theme.id} adds asset manifest ${theme.assetManifestId}; game uses ${assets.id}. Both packs must be registered.`);
+      const bootstrap = mergeAssetGroups(assets.preloadGroups.bootstrap, themeAssets.preloadGroups.bootstrap);
+      const baseGame = mergeAssetGroups(assets.preloadGroups["base-game"], themeAssets.preloadGroups["base-game"]);
+      const composition: ResolvedGameComposition = {
+        game, engine, features, theme, audio, mathProfile, assets, themeAssets,
+        preloadPlan: { bootstrap, baseGame }, compatibilityReport, warnings,
+      };
       this.events.publish("manifest:composition-resolved", { composition: clone(composition) });
       return clone(composition);
     } catch (error) {
@@ -209,3 +215,9 @@ function requireType<Type extends ManifestType>(manifest: HustleManifest, type: 
 function clone<Value>(value: Value): Value { return structuredClone(value); }
 function sortManifests(manifests: HustleManifest[]): HustleManifest[] { return manifests.sort((left, right) => compareAscii(left.manifestType, right.manifestType) || compareAscii(left.id, right.id)); }
 function compareAscii(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
+function mergeAssetGroups(...groups: readonly (readonly import("./manifest-types.js").AssetFileId[] | undefined)[]): readonly import("./manifest-types.js").AssetFileId[] {
+  const seen = new Set<string>();
+  const merged: import("./manifest-types.js").AssetFileId[] = [];
+  groups.forEach((group) => group?.forEach((id) => { if (!seen.has(id)) { seen.add(id); merged.push(id); } }));
+  return Object.freeze(merged);
+}

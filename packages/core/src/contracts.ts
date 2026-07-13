@@ -75,6 +75,13 @@ export interface RecoverySnapshot {
   readonly presentationProgress: PresentationProgress;
   /** Optional, engine-agnostic Feature SDK state captured at the same recovery boundary. */
   readonly featureRuntime?: import("./features/feature-types.js").FeatureRuntimeSnapshot;
+  /** Optional resource metadata only. Cached values, decoded resources and bytes are never serialized. */
+  readonly resourceRuntime?: ResourceRuntimeSnapshot;
+}
+
+export interface ResourceRuntimeSnapshot {
+  readonly assets?: import("./assets/asset-types.js").AssetRuntimeSnapshot;
+  readonly theme?: import("./themes/theme-types.js").ThemeRuntimeSnapshot;
 }
 
 export interface EngineEventMap {

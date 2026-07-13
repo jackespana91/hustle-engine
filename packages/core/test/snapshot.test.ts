@@ -26,4 +26,16 @@ describe("recovery snapshots", () => {
   it("reject unsupported versions", () => {
     expect(() => parseSnapshot('{"version":2,"lifecycleState":"idle"}')).toThrow(UnsupportedSnapshotVersionError);
   });
+
+  it("round-trips optional resource metadata without resource values", () => {
+    const withResources: RecoverySnapshot = { ...snapshot, resourceRuntime: {} };
+    expect(parseSnapshot(serializeSnapshot(withResources))).toEqual(withResources);
+  });
+
+  it("rejects malformed resource recovery metadata", () => {
+    expect(() => parseSnapshot(JSON.stringify({
+      ...snapshot,
+      resourceRuntime: { assets: { schemaVersion: 1, resolvedAssets: "invalid", cache: {} } },
+    }))).toThrow("invalid asset recovery data");
+  });
 });

@@ -7,6 +7,7 @@ import {
   type Money,
   type PresentationProgress,
   type RecoverySnapshot,
+  type ResourceRuntimeSnapshot,
   type RoundOutcome,
   type RoundStatus,
 } from "./contracts.js";
@@ -61,21 +62,28 @@ export class RoundController {
     }
   }
 
-  interrupt(featureRuntime?: FeatureRuntimeSnapshot): RecoverySnapshot {
+  interrupt(featureRuntime?: FeatureRuntimeSnapshot, resourceRuntime?: ResourceRuntimeSnapshot): RecoverySnapshot {
     if (this.state !== "presenting") throw new InvalidOutcomeError("Only a presenting round can be interrupted");
     this.queue.interrupt();
     this.transition("interrupted");
-    const snapshot = this.createSnapshot(featureRuntime);
+    const snapshot = this.createSnapshot(featureRuntime, resourceRuntime);
     this.events.publish("round:interrupted", { snapshot });
     return snapshot;
   }
 
-  async restore(snapshotOrJson: RecoverySnapshot | string): Promise<void> {
+  async restore(
+    snapshotOrJson: RecoverySnapshot | string,
+    restoreResources?: (snapshot: ResourceRuntimeSnapshot) => void | Promise<void>,
+  ): Promise<void> {
     try {
       const snapshot = typeof snapshotOrJson === "string" ? parseSnapshot(snapshotOrJson) : snapshotOrJson;
       this.validateSnapshot(snapshot);
       if (!["idle", "interrupted", "completed", "failed"].includes(this.state)) {
         throw new InvalidOutcomeError(`Cannot recover from ${this.state}`);
+      }
+      // Resource recovery is staged before round state or animation queues are mutated.
+      if (snapshot.resourceRuntime !== undefined && restoreResources !== undefined) {
+        await restoreResources(snapshot.resourceRuntime);
       }
       this.transition("recovering");
       this.outcomeValue = snapshot.round;
@@ -101,7 +109,7 @@ export class RoundController {
     }
   }
 
-  createSnapshot(featureRuntime?: FeatureRuntimeSnapshot): RecoverySnapshot {
+  createSnapshot(featureRuntime?: FeatureRuntimeSnapshot, resourceRuntime?: ResourceRuntimeSnapshot): RecoverySnapshot {
     const queue = this.queue.snapshot();
     return {
       version: 1,
@@ -113,6 +121,7 @@ export class RoundController {
       transitionHistory: this.machine.history,
       presentationProgress: this.progressValue,
       ...(featureRuntime === undefined ? {} : { featureRuntime }),
+      ...(resourceRuntime === undefined ? {} : { resourceRuntime }),
     };
   }
 

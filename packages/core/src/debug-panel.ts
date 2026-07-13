@@ -1,6 +1,8 @@
 import type { RecoverySnapshot, RoundStatus, TransitionRecord } from "./contracts.js";
+import type { AssetDebugSnapshot } from "./assets/asset-types.js";
 import type { FeatureDebugSnapshot } from "./features/feature-debug.js";
 import type { FeatureManifestId } from "./manifests/manifest-types.js";
+import type { ThemeDebugSnapshot } from "./themes/theme-types.js";
 
 export interface DebugPanelState {
   readonly currentState: RoundStatus;
@@ -42,6 +44,17 @@ export interface DebugPanelOptions {
   readonly initiallyOpen?: boolean;
   readonly title?: string;
   readonly features?: DebugPanelFeatureIntegration;
+  readonly assetThemes?: DebugPanelAssetThemeIntegration;
+}
+
+/** Concise, read-only resource projection shared by every future game host. */
+export interface DebugPanelAssetThemeSnapshot {
+  readonly assets: AssetDebugSnapshot;
+  readonly theme: ThemeDebugSnapshot;
+}
+
+export interface DebugPanelAssetThemeIntegration {
+  readonly getState: () => DebugPanelAssetThemeSnapshot;
 }
 
 export interface DebugPanelFeatureActions {
@@ -108,7 +121,11 @@ export class HustleDebugPanel {
     this.root.className = "hustle-debug-shell";
     this.root.dataset.open = String(this.open);
     this.root.setAttribute("aria-label", "Hustle Engine Debug Panel");
-    this.root.innerHTML = panelMarkup(options.title ?? "HUSTLE DEBUG", options.features !== undefined);
+    this.root.innerHTML = panelMarkup(
+      options.title ?? "HUSTLE DEBUG",
+      options.features !== undefined,
+      options.assetThemes !== undefined,
+    );
     this.panel = requireElement(this.root, ".hdebug-panel");
     (options.mount ?? document.body).append(this.root);
     this.bindInteractions();
@@ -289,7 +306,39 @@ export class HustleDebugPanel {
     this.set("average-frame", `${this.performance.averageFrameTime} ms`);
     this.set("worst-frame", `${this.performance.worstFrame} ms`);
     this.renderFeatures();
+    this.renderAssetThemes();
     this.renderEvents();
+  }
+
+  private renderAssetThemes(): void {
+    const integration = this.options.assetThemes;
+    if (!integration) return;
+    const { assets, theme } = integration.getState();
+    const progress = assets.progress;
+    const latestThemeEvent = theme.latestEvents.at(-1);
+    const selection = theme.activeSelection;
+    const appliedThemes = new Set(theme.appliedThemeIds.map(String));
+    const overrides = theme.registeredThemes
+      .filter(({ id, layer }) => appliedThemes.has(String(id)) &&
+        (layer === "operator" || layer === "seasonal" || layer === "accessibility"))
+      .map(({ id }) => id);
+    this.set("asset-count", `${assets.registeredCount}`);
+    this.set("asset-loaded", `${assets.loadedCount}`);
+    this.set("asset-pending", `${assets.pendingCount}`);
+    this.set("asset-failed", `${assets.failedCount}`);
+    this.set("asset-cache-bytes", formatEstimatedBytes(assets.estimatedCacheBytes));
+    this.set("asset-preload-group", assets.activePreloadGroup ?? "Idle");
+    this.set("asset-progress", progress
+      ? `${progress.completedCount}/${progress.requestedCount} · ${Math.round(progress.fraction * 100)}%`
+      : "No active preload");
+    this.set("asset-latest-event", assets.latestEvent?.type ?? "No asset events");
+    this.set("theme-composition", theme.appliedThemeIds.join(" → ") || "No active theme");
+    this.set("theme-base", selection?.base ?? "—");
+    this.set("theme-game", selection?.game ?? "—");
+    this.set("theme-overrides", overrides.join(" → ") || "None");
+    this.set("theme-token-count", `${Object.keys(theme.tokens).length}`);
+    this.set("theme-alias-count", `${Object.keys(theme.assetAliases).length}`);
+    this.set("theme-latest-event", latestThemeEvent?.type ?? "No theme events");
   }
 
   private renderFeatures(): void {
@@ -355,7 +404,7 @@ export function installHustleDebugPanel(options: DebugPanelOptions): HustleDebug
   return new HustleDebugPanel(options);
 }
 
-function panelMarkup(title: string, includeFeatures: boolean): string {
+function panelMarkup(title: string, includeFeatures: boolean, includeAssetThemes: boolean): string {
   return `
     <button class="hdebug-edge" data-debug-toggle aria-label="Toggle debug panel" aria-expanded="true"><span>DEBUG</span><b>⌘⇧D</b></button>
     <div class="hdebug-panel">
@@ -366,6 +415,7 @@ function panelMarkup(title: string, includeFeatures: boolean): string {
           ["Delta Time", "delta"], ["Current Animation", "animation"], ["Animation Queue Length", "queue"],
         ]))}
         ${includeFeatures ? featureSection() : ""}
+        ${includeAssetThemes ? assetThemeSections() : ""}
         ${section("MEMORY", rows([["Current Snapshot", "snapshot", "pre"], ["Last Save", "last-save"], ["Recovery Version", "recovery-version"]]))}
         ${section("EVENTS", `<input data-debug-filter type="search" placeholder="Filter events" aria-label="Filter events"><div class="hdebug-event-actions">${button("toggle-stream", "Pause Event Stream")}${button("clear-events", "Clear Log")}</div><div class="hdebug-event-log" data-debug-value="event-log"></div>`)}
         ${section("ANIMATIONS", actionGrid([["pause", "Pause"], ["resume", "Resume"], ["skip", "Skip"], ["skip-all", "Skip All"], ["replay", "Replay Last Round"]]))}
@@ -376,6 +426,27 @@ function panelMarkup(title: string, includeFeatures: boolean): string {
         ${section("TESTING", actionGrid([["small", "Generate Small Round"], ["medium", "Generate Medium Round"], ["huge", "Generate Huge Round"], ["bad", "Generate Bad Round"], ["animation-failure", "Generate Animation Failure"], ["recovery-test", "Generate Recovery Test"]]))}
       </div>
     </div>`;
+}
+
+function assetThemeSections(): string {
+  return `${section("ASSETS", rows([
+    ["Registered Count", "asset-count"],
+    ["Loaded Count", "asset-loaded"],
+    ["Pending Count", "asset-pending"],
+    ["Failed Count", "asset-failed"],
+    ["Estimated Cache Bytes", "asset-cache-bytes"],
+    ["Active Preload Group", "asset-preload-group"],
+    ["Progress", "asset-progress"],
+    ["Latest Asset Event", "asset-latest-event"],
+  ]))}${section("THEME", rows([
+    ["Active Composition", "theme-composition", "pre"],
+    ["Current Base Theme", "theme-base"],
+    ["Game Theme", "theme-game"],
+    ["Active Overrides", "theme-overrides", "pre"],
+    ["Token Count", "theme-token-count"],
+    ["Current Asset Alias Count", "theme-alias-count"],
+    ["Latest Theme Event", "theme-latest-event"],
+  ]))}`;
 }
 
 function featureSection(): string {
@@ -448,6 +519,12 @@ function escapeHtml(value: string): string {
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function formatEstimatedBytes(value: number): string {
+  if (value < 1_024) return `${value} B est.`;
+  if (value < 1_024 * 1_024) return `${round(value / 1_024)} KiB est.`;
+  return `${round(value / (1_024 * 1_024))} MiB est.`;
 }
 
 function requireElement(root: HTMLElement, selector: string): HTMLElement {

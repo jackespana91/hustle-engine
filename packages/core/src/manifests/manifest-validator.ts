@@ -21,7 +21,11 @@ const LOCALE = /^[a-z]{2,3}(?:-[A-Z]{2}|-[0-9]{3})?$/;
 const ENGINE_STATUSES = ["experimental", "development", "production", "deprecated"] as const;
 const PLATFORMS = ["web", "mobile-web", "desktop-web"] as const;
 const ORIENTATIONS = ["portrait", "landscape", "responsive"] as const;
-const ASSET_TYPES = ["image", "audio", "font", "json", "text", "binary"] as const;
+const ASSET_TYPES = [
+  "image", "spritesheet", "animation-data", "font-reference", "json", "shader-reference",
+  "video-reference", "binary", "other", "audio", "font", "text",
+] as const;
+const THEME_LAYERS = ["base", "game", "operator", "seasonal", "accessibility"] as const;
 
 export class ManifestValidator {
   validate(input: unknown): ManifestValidationResult {
@@ -110,6 +114,9 @@ export function validateRelationships(manifests: readonly HustleManifest[]): rea
     if (manifest.manifestType === "theme") {
       requireReference(byId, manifest.assetManifestId, "asset", manifest, "assetManifestId", errors);
       manifest.supportedEngineIds.forEach((engineId, index) => requireReference(byId, engineId, "engine", manifest, `supportedEngineIds.${index}`, errors));
+      manifest.supportedGameIds?.forEach((gameId, index) => requireReference(byId, gameId, "game", manifest, `supportedGameIds.${index}`, errors));
+      if (manifest.parentThemeId) requireReference(byId, manifest.parentThemeId, "theme", manifest, "parentThemeId", errors);
+      if (manifest.fallbackThemeId) requireReference(byId, manifest.fallbackThemeId, "theme", manifest, "fallbackThemeId", errors);
     }
     if (manifest.manifestType === "audio") manifest.supportedEngineIds.forEach((engineId, index) => requireReference(byId, engineId, "engine", manifest, `supportedEngineIds.${index}`, errors));
     if (manifest.manifestType === "math") requireReference(byId, manifest.engineId, "engine", manifest, "engineId", errors);
@@ -178,10 +185,27 @@ function validateTheme(input: Record<string, unknown>, issue: Issue): void {
   ["description", "assetManifestId"].forEach((field) => requiredString(input, field, issue));
   idField(input, "assetManifestId", issue);
   idArray(input, "supportedEngineIds", issue);
+  if (input.supportedGameIds !== undefined) idArray(input, "supportedGameIds", issue);
+  ["parentThemeId", "fallbackThemeId"].forEach((field) => {
+    if (input[field] !== undefined) { requiredString(input, field, issue); idField(input, field, issue); }
+  });
+  if (input.layer !== undefined && !THEME_LAYERS.includes(input.layer as typeof THEME_LAYERS[number])) {
+    issue("INVALID_VALUE", `Invalid theme layer ${String(input.layer)}`, "layer");
+  }
   requiredRecord(input, "designTokens", issue);
   if (isRecord(input.designTokens)) for (const [token, value] of Object.entries(input.designTokens)) {
     if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") issue("INVALID_TYPE", `Design token ${token} must be a string, number, or boolean`, `designTokens.${token}`);
     if (typeof value === "number" && !Number.isFinite(value)) issue("INVALID_VALUE", `Design token ${token} must be finite`, `designTokens.${token}`);
+  }
+  ["componentTokens", "typographyReferences", "spacingScale", "sizingScale", "effectsTokens", "animationTokens"].forEach((field) => {
+    if (input[field] !== undefined) validateTokenTree(input[field], field, issue);
+  });
+  if (input.assetAliases !== undefined) {
+    if (!isRecord(input.assetAliases)) issue("INVALID_TYPE", "assetAliases must be an object", "assetAliases");
+    else for (const [alias, assetId] of Object.entries(input.assetAliases)) {
+      if (!isSafeTokenPath(alias)) issue("INVALID_VALUE", `Invalid asset alias ${alias}`, `assetAliases.${alias}`);
+      if (typeof assetId !== "string" || !ID.test(assetId)) issue("MALFORMED_ID", `Invalid aliased asset id ${String(assetId)}`, `assetAliases.${alias}`);
+    }
   }
 }
 
@@ -226,6 +250,9 @@ function validateAsset(input: Record<string, unknown>, issue: Issue): void {
       if (typeof file.id === "string" && !ID.test(file.id)) issue("MALFORMED_ID", `Malformed asset file id ${file.id}`, `files.${index}.id`);
       if (typeof file.type === "string" && !ASSET_TYPES.includes(file.type as typeof ASSET_TYPES[number])) issue("INVALID_VALUE", `Invalid asset file type ${file.type}`, `files.${index}.type`);
       if (typeof file.path === "string" && !isSafeAssetPath(file.path)) issue("INVALID_ASSET_PATH", `Invalid asset path ${file.path}`, `files.${index}.path`);
+      if (file.estimatedBytes !== undefined && (!Number.isSafeInteger(file.estimatedBytes) || Number(file.estimatedBytes) < 0)) issue("INVALID_VALUE", "estimatedBytes must be a non-negative safe integer", `files.${index}.estimatedBytes`);
+      if (file.fallbackAssetId !== undefined && (typeof file.fallbackAssetId !== "string" || !ID.test(file.fallbackAssetId))) issue("MALFORMED_ID", `Invalid fallback asset id ${String(file.fallbackAssetId)}`, `files.${index}.fallbackAssetId`);
+      if (file.variants !== undefined) validateAssetVariants(file.variants, index, issue);
     });
     if (new Set(fileIds).size !== fileIds.length) issue("DUPLICATE_ASSET_ID", "Asset manifest contains duplicate file ids", "files");
   }
@@ -252,7 +279,43 @@ function idField(record: Record<string, unknown>, field: string, issue: Issue): 
 function idArray(record: Record<string, unknown>, field: string, issue: Issue): void { stringArray(record, field, issue); const value = record[field]; if (Array.isArray(value)) value.forEach((id, index) => { if (typeof id === "string" && !ID.test(id)) issue("MALFORMED_ID", `Malformed manifest id ${id}`, `${field}.${index}`); }); }
 function enumArray<const Values extends readonly string[]>(record: Record<string, unknown>, field: string, values: Values, issue: Issue): void { const input = record[field]; if (Array.isArray(input)) input.forEach((value, index) => { if (typeof value === "string" && !(values as readonly string[]).includes(value)) issue("INVALID_VALUE", `Invalid ${field} value ${value}`, `${field}.${index}`); }); }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
-function isSafeAssetPath(path: string): boolean { return path.length > 0 && !path.startsWith("/") && !path.includes("..") && !path.includes("\\") && !/^[a-z]+:/i.test(path); }
+function isSafeAssetPath(path: string): boolean {
+  if (path.length === 0 || path.includes("\\") || path.includes("..")) return false;
+  if (path.startsWith("https://")) return true;
+  if (path.startsWith("data:")) return /^data:[a-z0-9.+-]+\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(path);
+  return !path.startsWith("/") && !/^[a-z]+:/i.test(path);
+}
+
+function validateTokenTree(value: unknown, path: string, issue: Issue): void {
+  if (!isRecord(value)) { issue("INVALID_TYPE", `${path} must be an object`, path); return; }
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (!isSafeTokenKey(key)) { issue("INVALID_VALUE", `Unsafe theme token key ${key}`, childPath); continue; }
+    if (isRecord(child)) validateTokenTree(child, childPath, issue);
+    else if (typeof child !== "string" && typeof child !== "number" && typeof child !== "boolean") issue("INVALID_TYPE", `Theme token ${childPath} must be a string, number, boolean, or token object`, childPath);
+    else if (typeof child === "number" && !Number.isFinite(child)) issue("INVALID_VALUE", `Theme token ${childPath} must be finite`, childPath);
+  }
+}
+
+function validateAssetVariants(value: unknown, fileIndex: number, issue: Issue): void {
+  if (!Array.isArray(value)) { issue("INVALID_TYPE", "variants must be an array", `files.${fileIndex}.variants`); return; }
+  const ids = new Set<string>();
+  value.forEach((variant, variantIndex) => {
+    const base = `files.${fileIndex}.variants.${variantIndex}`;
+    if (!isRecord(variant)) { issue("INVALID_TYPE", "Asset variant must be an object", base); return; }
+    ["id", "path"].forEach((field) => requiredString(variant, field, (code, message, child) => issue(code, message, `${base}.${child}`)));
+    requiredRecord(variant, "conditions", (code, message, child) => issue(code, message, `${base}.${child}`));
+    if (typeof variant.id === "string") {
+      if (ids.has(variant.id)) issue("DUPLICATE_ASSET_ID", `Duplicate variant id ${variant.id}`, `${base}.id`);
+      ids.add(variant.id);
+    }
+    if (typeof variant.path === "string" && !isSafeAssetPath(variant.path)) issue("INVALID_ASSET_PATH", `Invalid variant path ${variant.path}`, `${base}.path`);
+    if (variant.estimatedBytes !== undefined && (!Number.isSafeInteger(variant.estimatedBytes) || Number(variant.estimatedBytes) < 0)) issue("INVALID_VALUE", "estimatedBytes must be a non-negative safe integer", `${base}.estimatedBytes`);
+  });
+}
+
+function isSafeTokenPath(path: string): boolean { return path.length > 0 && path.split(".").every(isSafeTokenKey); }
+function isSafeTokenKey(key: string): boolean { return key.length > 0 && !["__proto__", "prototype", "constructor"].includes(key); }
 
 function requireReference(map: ReadonlyMap<string, HustleManifest>, id: string, type: ManifestType, owner: HustleManifest, path: string, errors: ManifestValidationError[]): HustleManifest | undefined {
   const found = map.get(id);

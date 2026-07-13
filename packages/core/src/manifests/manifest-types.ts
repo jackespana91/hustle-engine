@@ -82,11 +82,26 @@ export interface FeatureManifest extends ManifestBase<"feature", FeatureManifest
 }
 
 export type DesignTokenValue = string | number | boolean;
+export interface DesignTokenTree {
+  readonly [key: string]: DesignTokenValue | DesignTokenTree;
+}
 export interface ThemeManifest extends ManifestBase<"theme", ThemeManifestId> {
   readonly description: string;
   readonly assetManifestId: AssetManifestId;
   readonly supportedEngineIds: readonly EngineManifestId[];
+  /** Optional schema 1 additions. Omitted values retain legacy ThemeManifest behaviour. */
+  readonly supportedGameIds?: readonly GameManifestId[];
+  readonly parentThemeId?: ThemeManifestId;
+  readonly fallbackThemeId?: ThemeManifestId;
+  readonly layer?: "base" | "game" | "operator" | "seasonal" | "accessibility";
   readonly designTokens: Readonly<Record<string, DesignTokenValue>>;
+  readonly componentTokens?: DesignTokenTree;
+  readonly typographyReferences?: DesignTokenTree;
+  readonly spacingScale?: DesignTokenTree;
+  readonly sizingScale?: DesignTokenTree;
+  readonly effectsTokens?: DesignTokenTree;
+  readonly animationTokens?: DesignTokenTree;
+  readonly assetAliases?: Readonly<Record<string, AssetFileId>>;
 }
 
 export interface AudioResource {
@@ -114,14 +129,27 @@ export interface MathManifest extends ManifestBase<"math", MathManifestId> {
   readonly configurationReference: string;
 }
 
-export type AssetFileType = "image" | "audio" | "font" | "json" | "text" | "binary";
+export type AssetFileType = "image" | "spritesheet" | "animation-data" | "font-reference" |
+  "json" | "shader-reference" | "video-reference" | "binary" | "other" |
+  /** Legacy manifest values retained for backwards compatibility. */ "audio" | "font" | "text";
+export interface AssetFileVariant {
+  readonly id: string;
+  readonly path: string;
+  readonly checksum?: string;
+  readonly estimatedBytes?: number;
+  readonly conditions: Readonly<Record<string, unknown>>;
+  readonly metadata?: ManifestMetadata;
+}
 export interface AssetFile {
   readonly id: AssetFileId;
   readonly path: string;
   readonly type: AssetFileType;
   readonly required: boolean;
   readonly checksum: string;
+  readonly estimatedBytes?: number;
   readonly tags: readonly string[];
+  readonly variants?: readonly AssetFileVariant[];
+  readonly fallbackAssetId?: AssetFileId;
   readonly metadata: ManifestMetadata;
 }
 
@@ -149,6 +177,13 @@ export interface ResolvedGameComposition {
   readonly audio: AudioManifest;
   readonly mathProfile: MathManifest;
   readonly assets: AssetManifest;
+  /** Asset pack referenced by the active theme; may be the same object as `assets`. */
+  readonly themeAssets: AssetManifest;
+  /** Stable groups that hosts can preload before entering game lifecycle. */
+  readonly preloadPlan: {
+    readonly bootstrap: readonly AssetFileId[];
+    readonly baseGame: readonly AssetFileId[];
+  };
   readonly compatibilityReport: CompatibilityReport;
   readonly warnings: readonly string[];
 }

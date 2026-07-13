@@ -25,3 +25,11 @@ Read [`FEATURE_SDK.md`](../../docs/architecture/FEATURE_SDK.md) before adding or
 The [`manifests`](src/manifests) module provides the data-only composition boundary for engines, games, reusable features, themes, audio, illustrative math profiles, and assets. It includes runtime validation, deterministic game resolution, stable JSON serialization, transactional development reloads, schema migration contracts, and typed lifecycle events.
 
 Manifest declarations never contain gameplay, animation, RNG, wagering, rendering, or audio playback logic. See [`MANIFEST_SYSTEM.md`](../../docs/architecture/MANIFEST_SYSTEM.md) for the complete contract and the certification limits of math metadata.
+
+## Asset and Theme System
+
+The [`assets`](src/assets) module owns logical resource contracts, deterministic condition-based variant and fallback resolution, atomic registration/reload, environment-neutral loading, cancellation, timeouts, retries, concurrency, request deduplication, preload progress, estimated-byte caching, metadata-only recovery, typed events, and a DOM-free debug adapter.
+
+The [`themes`](src/themes) module owns validated immutable theme data, safe token and alias resolution, base/game/operator/seasonal/accessibility composition, conflict inspection, atomic activation and swapping, versioned state restore, typed events, and a DOM-free debug adapter.
+
+Core never fetches through a browser API, creates DOM/Pixi resources, emits arbitrary CSS, or contains final game artwork. Hosts inject the loading/decoding adapter and rendering interpretation. Read [`ASSET_THEME_SYSTEM.md`](../../docs/architecture/ASSET_THEME_SYSTEM.md) before adding production assets or themes.
