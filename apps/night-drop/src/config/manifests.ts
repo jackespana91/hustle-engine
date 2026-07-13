@@ -1,0 +1,157 @@
+import {
+  MANIFEST_SCHEMA_VERSION,
+  type AssetManifest,
+  type AudioManifest,
+  type GameManifest,
+  type HustleManifest,
+  type MathManifest,
+  type ThemeManifest,
+} from "@hustle/core";
+import { ROUTERUN_MANIFEST } from "@hustle/routerun";
+import {
+  NIGHT_DROP_ASSET_IDS,
+  NIGHT_DROP_ASSET_MANIFEST_ID,
+  NIGHT_DROP_AUDIO_MANIFEST_ID,
+  NIGHT_DROP_ENGINE_ID,
+  NIGHT_DROP_FEATURE_IDS,
+  NIGHT_DROP_FOUNDATION_THEME_ID,
+  NIGHT_DROP_GAME_ID,
+  NIGHT_DROP_MATH_MANIFEST_ID,
+  NIGHT_DROP_THEME_ID,
+} from "./ids.js";
+
+const logicalAsset = (id: (typeof NIGHT_DROP_ASSET_IDS)[keyof typeof NIGHT_DROP_ASSET_IDS], tags: readonly string[]) => ({
+  id,
+  path: String(id),
+  type: "other" as const,
+  required: true,
+  checksum: "logical-id-only",
+  estimatedBytes: 0,
+  tags,
+  metadata: { logicalOnly: true, productionFilePending: true },
+});
+
+export const NIGHT_DROP_ASSET_MANIFEST: AssetManifest = {
+  manifestType: "asset",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_ASSET_MANIFEST_ID,
+  name: "Night Drop Logical Assets",
+  version: "0.1.0",
+  files: [
+    logicalAsset(NIGHT_DROP_ASSET_IDS.dash, ["character", "runner"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.clamp, ["character", "feature"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.street, ["tile", "board"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.destination, ["tile", "destination"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.tip, ["overlay", "reward"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.package, ["overlay", "collectable"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.neon, ["effect", "ambient"]),
+    logicalAsset(NIGHT_DROP_ASSET_IDS.shortcut, ["effect", "feature"]),
+  ],
+  preloadGroups: {
+    bootstrap: [NIGHT_DROP_ASSET_IDS.dash, NIGHT_DROP_ASSET_IDS.street, NIGHT_DROP_ASSET_IDS.neon],
+    "base-game": Object.values(NIGHT_DROP_ASSET_IDS),
+  },
+  optionalGroups: {},
+  metadata: { gamePack: "night-drop", logicalIdsOnly: true },
+};
+
+export const NIGHT_DROP_AUDIO_MANIFEST: AudioManifest = {
+  manifestType: "audio",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_AUDIO_MANIFEST_ID,
+  name: "Night Drop Audio Placeholders",
+  version: "0.1.0",
+  supportedEngineIds: [NIGHT_DROP_ENGINE_ID],
+  music: [{ id: "audio.night-drop.music.loop", path: "audio.night-drop.music.loop", metadata: { placeholder: true } }],
+  soundEffects: [
+    { id: "audio.night-drop.sfx.package", path: "audio.night-drop.sfx.package", metadata: { placeholder: true } },
+    { id: "audio.night-drop.sfx.shortcut", path: "audio.night-drop.sfx.shortcut", metadata: { placeholder: true } },
+    { id: "audio.night-drop.sfx.clamp", path: "audio.night-drop.sfx.clamp", metadata: { placeholder: true } },
+  ],
+  voicePacks: [{ id: "audio.night-drop.voice.mara", path: "audio.night-drop.voice.mara", metadata: { placeholder: true } }],
+  metadata: { gamePack: "night-drop", placeholderOnly: true, productionAudio: false },
+};
+
+export const NIGHT_DROP_MATH_MANIFEST: MathManifest = {
+  manifestType: "math",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_MATH_MANIFEST_ID,
+  name: "Night Drop External Outcome Reference",
+  version: "0.1.0",
+  engineId: NIGHT_DROP_ENGINE_ID,
+  modelVersion: "external-0.1.0",
+  volatilityLabel: "external-server-controlled",
+  targetRtpBasisPoints: 0,
+  maxWinMultiplierBasisPoints: 0,
+  currencyNeutral: true,
+  configurationReference: "stake.engine.outcome.reference",
+  metadata: { presentationOnly: true, certified: false, noMathModel: true },
+};
+
+export const NIGHT_DROP_FOUNDATION_THEME_MANIFEST: ThemeManifest = {
+  manifestType: "theme",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_FOUNDATION_THEME_ID,
+  name: "Night Drop Foundation",
+  version: "0.1.0",
+  description: "Game-pack-owned base tokens for the standalone Night Drop presentation.",
+  assetManifestId: NIGHT_DROP_ASSET_MANIFEST_ID,
+  supportedEngineIds: [NIGHT_DROP_ENGINE_ID],
+  supportedGameIds: [NIGHT_DROP_GAME_ID],
+  layer: "base",
+  designTokens: { "foundation.mode": "dark" },
+  metadata: { gamePack: "night-drop" },
+};
+
+export const NIGHT_DROP_THEME_MANIFEST: ThemeManifest = {
+  manifestType: "theme",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_THEME_ID,
+  name: "NightDropTheme",
+  version: "0.1.0",
+  description: "Neon city theme for late-night deliveries and elegantly bad decisions.",
+  assetManifestId: NIGHT_DROP_ASSET_MANIFEST_ID,
+  supportedEngineIds: [NIGHT_DROP_ENGINE_ID],
+  supportedGameIds: [NIGHT_DROP_GAME_ID],
+  layer: "game",
+  designTokens: { "brand.name": "Night Drop" },
+  assetAliases: {
+    "character.runner": NIGHT_DROP_ASSET_IDS.dash,
+    "character.enforcement": NIGHT_DROP_ASSET_IDS.clamp,
+    "board.street": NIGHT_DROP_ASSET_IDS.street,
+    "board.destination": NIGHT_DROP_ASSET_IDS.destination,
+    "collectable.tip": NIGHT_DROP_ASSET_IDS.tip,
+    "collectable.package": NIGHT_DROP_ASSET_IDS.package,
+    "effect.ambient": NIGHT_DROP_ASSET_IDS.neon,
+    "effect.shortcut": NIGHT_DROP_ASSET_IDS.shortcut,
+  },
+  metadata: { gamePack: "night-drop", themeSystem: true },
+};
+
+export const NIGHT_DROP_GAME_MANIFEST: GameManifest = {
+  manifestType: "game",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: NIGHT_DROP_GAME_ID,
+  name: "Night Drop",
+  version: "0.1.0",
+  engineId: NIGHT_DROP_ENGINE_ID,
+  engineVersionRange: "^0.1.0",
+  themeId: NIGHT_DROP_THEME_ID,
+  featureIds: Object.values(NIGHT_DROP_FEATURE_IDS),
+  audioManifestId: NIGHT_DROP_AUDIO_MANIFEST_ID,
+  mathManifestId: NIGHT_DROP_MATH_MANIFEST_ID,
+  assetManifestId: NIGHT_DROP_ASSET_MANIFEST_ID,
+  supportedLocales: ["en"],
+  defaultLocale: "en",
+  buildNumber: 1,
+  metadata: { commercialGamePackNumber: 1, consumes: "engine.routerun", presentationOnly: true },
+};
+
+export const NIGHT_DROP_PLATFORM_MANIFESTS: readonly HustleManifest[] = [
+  ROUTERUN_MANIFEST,
+  NIGHT_DROP_ASSET_MANIFEST,
+  NIGHT_DROP_FOUNDATION_THEME_MANIFEST,
+  NIGHT_DROP_THEME_MANIFEST,
+  NIGHT_DROP_AUDIO_MANIFEST,
+  NIGHT_DROP_MATH_MANIFEST,
+];

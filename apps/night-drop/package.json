@@ -1,0 +1,16 @@
+{
+  "name": "@hustle/night-drop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hustle/core": "0.1.0",
+    "@hustle/routerun": "0.1.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
