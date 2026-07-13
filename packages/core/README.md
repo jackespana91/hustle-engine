@@ -14,7 +14,11 @@ The panel is docked right, collapsible, scrollable, and toggled with `Cmd+Shift+
 
 ## Feature SDK
 
-Task 003 lives in [`features`](features) and exports the complete reusable plugin contract: metadata, context, state, events, lifecycle, registry, deterministic dependency ordering, loader, serializer, and placeholder feature implementations. See [`docs/features.md`](../../docs/features.md) before adding a production feature.
+The Feature SDK lives in [`src/features`](src/features) and exports engine-neutral contracts for manifests, implementations, controlled contexts, explicit results, typed events, lifecycle execution, registration, dependency and conflict validation, deterministic random values, versioned serialization, recovery, migrations, and debug inspection.
+
+Registration pairs executable behavior with a matching `FeatureManifest`. Dependencies always execute first; otherwise enabled features use ascending priority and ASCII feature ID. Blocking failures stop the operation, while explicitly non-blocking failures are isolated and reported. Cleanup remains predictable in both paths.
+
+Read [`FEATURE_SDK.md`](../../docs/architecture/FEATURE_SDK.md) before adding or consuming a reusable feature. The included Shortcut, Clamp, Five-Star, Sticky Wild, Hold and Win, and Collector implementations are placeholders, not production mechanics.
 
 ## Engine Manifest System
 

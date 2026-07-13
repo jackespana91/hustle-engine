@@ -25,7 +25,7 @@ Every registered manifest also carries a `manifestType` discriminator, schema ve
 Feature order is deterministic:
 
 1. dependencies precede dependants;
-2. among currently available features, higher priority executes first;
+2. among currently available features, lower numeric priority executes first;
 3. equal priority sorts by ASCII manifest ID.
 
 Resolution rejects missing references, engine-version mismatches, unsupported engines or features, missing dependencies, cycles, selected feature conflicts and nondeterministic commercial features.

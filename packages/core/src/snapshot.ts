@@ -25,6 +25,10 @@ export function parseSnapshot(serialized: string): RecoverySnapshot {
       !Array.isArray(value.transitionHistory) || !isRecord(value.presentationProgress)) {
     throw new CorruptedSnapshotError("Snapshot is missing required queue or history data");
   }
+  if (value.featureRuntime !== undefined && (!isRecord(value.featureRuntime) ||
+      value.featureRuntime.schemaVersion !== 1 || !Array.isArray(value.featureRuntime.features))) {
+    throw new CorruptedSnapshotError("Snapshot contains invalid Feature SDK recovery data");
+  }
   return value as unknown as RecoverySnapshot;
 }
 

@@ -10,6 +10,7 @@ import {
   type RoundOutcome,
   type RoundStatus,
 } from "./contracts.js";
+import type { FeatureRuntimeSnapshot } from "./features/feature-types.js";
 import { EngineError, InvalidOutcomeError } from "./errors.js";
 import { TypedEventBus } from "./event-bus.js";
 import { parseSnapshot } from "./snapshot.js";
@@ -60,11 +61,11 @@ export class RoundController {
     }
   }
 
-  interrupt(): RecoverySnapshot {
+  interrupt(featureRuntime?: FeatureRuntimeSnapshot): RecoverySnapshot {
     if (this.state !== "presenting") throw new InvalidOutcomeError("Only a presenting round can be interrupted");
     this.queue.interrupt();
     this.transition("interrupted");
-    const snapshot = this.createSnapshot();
+    const snapshot = this.createSnapshot(featureRuntime);
     this.events.publish("round:interrupted", { snapshot });
     return snapshot;
   }
@@ -100,7 +101,7 @@ export class RoundController {
     }
   }
 
-  createSnapshot(): RecoverySnapshot {
+  createSnapshot(featureRuntime?: FeatureRuntimeSnapshot): RecoverySnapshot {
     const queue = this.queue.snapshot();
     return {
       version: 1,
@@ -111,6 +112,7 @@ export class RoundController {
       currentCommand: queue.current,
       transitionHistory: this.machine.history,
       presentationProgress: this.progressValue,
+      ...(featureRuntime === undefined ? {} : { featureRuntime }),
     };
   }
 

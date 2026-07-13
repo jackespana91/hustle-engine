@@ -39,14 +39,14 @@ export const ROUTERUN_ENGINE_EXAMPLE: EngineManifest = {
 export const SHORTCUT_FEATURE_MANIFEST_EXAMPLE: FeatureManifest = {
   manifestType: "feature", schemaVersion: MANIFEST_SCHEMA_VERSION, id: featureManifestId("shortcut-feature"),
   name: "Shortcut Feature", version: "0.1.0", description: "Manifest only; no shortcut gameplay is implemented.",
-  supportedEngineIds: [ROUTERUN_ENGINE_EXAMPLE.id], dependencies: [], conflicts: [], priority: 100,
+  supportedEngineIds: [ROUTERUN_ENGINE_EXAMPLE.id], dependencies: [], optionalDependencies: [], conflicts: [], failurePolicy: "blocking", priority: 100,
   deterministic: true, stateVersion: "1.0.0", metadata: exampleMetadata,
 };
 
 export const FIVE_STAR_FEATURE_MANIFEST_EXAMPLE: FeatureManifest = {
   manifestType: "feature", schemaVersion: MANIFEST_SCHEMA_VERSION, id: featureManifestId("five-star-feature"),
   name: "Five-Star Feature", version: "0.1.0", description: "Manifest only; no Five-Star gameplay is implemented.",
-  supportedEngineIds: [ROUTERUN_ENGINE_EXAMPLE.id], dependencies: [SHORTCUT_FEATURE_MANIFEST_EXAMPLE.id], conflicts: [], priority: 80,
+  supportedEngineIds: [ROUTERUN_ENGINE_EXAMPLE.id], dependencies: [SHORTCUT_FEATURE_MANIFEST_EXAMPLE.id], optionalDependencies: [], conflicts: [], failurePolicy: "blocking", priority: 80,
   deterministic: true, stateVersion: "1.0.0", metadata: exampleMetadata,
 };
 

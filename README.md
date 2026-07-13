@@ -46,9 +46,11 @@ Amounts are integer micro-units (`1_000_000` represents one major currency unit)
 
 Hustle Core exports a reusable, game-neutral debug panel for every future browser game. It provides live lifecycle, queue, snapshot, event, telemetry, frame-performance, input, and deterministic testing controls in a dark docked interface. Install it with `installHustleDebugPanel(...)`, supplying only a debug-state reader and safe action callbacks. Toggle it with `Cmd+Shift+D` on macOS or `Ctrl+Shift+D` elsewhere.
 
-### Hustle Feature SDK · Task 003
+### Hustle Feature SDK
 
-The Feature SDK provides deterministic plugin registration, engine compatibility discovery, dependency validation, lifecycle execution, enable/disable controls, and versioned state serialization. Six demo feature classes are placeholders only. See [`docs/features.md`](docs/features.md) for the authoring contract and integration rules.
+The Feature SDK is Hustle Core's manifest-backed plugin architecture for reusable commercial-engine capabilities. It validates implementation/manifest pairs, resolves dependencies and conflicts, executes enabled features deterministically, publishes typed lifecycle events, and preserves versioned feature state through interruption and recovery. Dependencies run first; otherwise execution uses ascending priority and an ASCII feature-ID tie-breaker.
+
+The six included feature implementations are non-production architectural examples only. See the authoritative [`Feature SDK architecture guide`](docs/architecture/FEATURE_SDK.md) for lifecycle, failure policy, recovery, migrations, commercial-engine integration, and authoring boundaries.
 
 ### Engine Manifest System
 
@@ -68,7 +70,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Use the controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures.
+Open the local URL printed by Vite. Use the lifecycle controls to complete a fixed round, pause or skip commands, interrupt and restore, or trigger validation and executor failures. The **Features** workspace loads and inspects placeholder plugins, compares deterministic executions, exercises dependency and failure scenarios, and serializes or restores feature state. Feature activity is also visible in the docked Debug Panel.
 
 ### Validate the repository
 

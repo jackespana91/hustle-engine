@@ -1,99 +1,203 @@
-# Hustle Feature SDK
+# Hustle Feature SDK quick-start
 
-The Hustle Feature SDK is the engine-neutral plugin layer for reusable commercial-engine capabilities. It lets an engine register, discover, order, execute, disable, serialize, restore, and clean up features without importing their concrete implementations.
+The Feature SDK is Hustle Core's engine-neutral plugin layer. Commercial engines register an executable `FeatureImplementation` together with its descriptive `FeatureManifest`, then use `FeatureRunner` to execute it without importing concrete feature classes.
 
-Task 003 defines architecture only. The included `ShortcutFeature`, `ClampFeature`, `FiveStarFeature`, `StickyWildFeature`, `HoldAndWinFeature`, and `CollectorFeature` are lifecycle placeholders. They do not contain game rules, win calculations, symbols, reel behavior, RTP logic, or wagering logic.
+The complete design, recovery rules, and package boundaries are documented in [`architecture/FEATURE_SDK.md`](architecture/FEATURE_SDK.md).
 
-## Build a feature
+## 1. Pair a manifest with an implementation
 
-Implement the `Feature` interface and provide immutable metadata:
+The manifest is authoritative for composition and compatibility. The implementation contains lifecycle behavior. Their ID, implementation version, state version, and failure policy must match exactly.
 
 ```ts
 import {
-  featureId,
-  type Feature,
+  MANIFEST_SCHEMA_VERSION,
+  createFeatureResult,
+  engineManifestId,
+  featureManifestId,
   type FeatureContext,
-  type FeatureMetadata,
+  type FeatureImplementation,
+  type FeatureManifest,
+  type FeatureResult,
   type FeatureState,
 } from "@hustle/core";
 
-interface ExampleState extends FeatureState {
+const ENGINE_ID = engineManifestId("routerun-engine-001");
+const FEATURE_ID = featureManifestId("example-feature");
+
+export const EXAMPLE_FEATURE_MANIFEST: FeatureManifest = {
+  manifestType: "feature",
+  schemaVersion: MANIFEST_SCHEMA_VERSION,
+  id: FEATURE_ID,
+  name: "Example Feature",
+  version: "1.0.0",
+  description: "Engine-neutral example used to demonstrate the SDK contract.",
+  supportedEngineIds: [ENGINE_ID],
+  dependencies: [],
+  optionalDependencies: [],
+  conflicts: [],
+  failurePolicy: "blocking",
+  priority: 100,
+  deterministic: true,
+  stateVersion: "1.0.0",
+  metadata: { production: false },
+};
+
+type ExampleState = FeatureState & {
+  readonly initialized: boolean;
   readonly triggerCount: number;
-}
+};
 
-export class ExampleFeature implements Feature<ExampleState> {
-  readonly metadata: FeatureMetadata = {
-    id: featureId("example"),
-    name: "Example Feature",
-    version: "1.0.0",
-    description: "A reusable example feature.",
-    supportedEngines: ["routerun"],
-    dependencies: [],
-    priority: 50,
-  };
+export class ExampleFeature implements FeatureImplementation<ExampleState> {
+  readonly id = EXAMPLE_FEATURE_MANIFEST.id;
+  readonly version = EXAMPLE_FEATURE_MANIFEST.version;
+  readonly stateVersion = EXAMPLE_FEATURE_MANIFEST.stateVersion;
+  readonly failurePolicy = EXAMPLE_FEATURE_MANIFEST.failurePolicy ?? "blocking";
 
-  private state: ExampleState = { triggerCount: 0 };
+  private state: ExampleState = { initialized: false, triggerCount: 0 };
 
-  initialize(_context: FeatureContext): void {}
-  canTrigger(_context: FeatureContext): boolean { return true; }
-  trigger(_context: FeatureContext): void {
-    this.state = { triggerCount: this.state.triggerCount + 1 };
+  initialize(context: FeatureContext<ExampleState>): FeatureResult<ExampleState> {
+    return createFeatureResult<ExampleState>({
+      featureStateUpdates: [{
+        state: { ...context.featureState.read(), initialized: true },
+        strategy: "replace",
+      }],
+    });
   }
-  update(_context: FeatureContext, _deltaMs: number): void {}
-  serialize(): ExampleState { return { ...this.state }; }
-  deserialize(state: ExampleState): void { this.state = { ...state }; }
-  cleanup(_context: FeatureContext): void {}
+
+  canTrigger(context: FeatureContext<ExampleState>): boolean {
+    return context.featureState.read().initialized;
+  }
+
+  trigger(context: FeatureContext<ExampleState>): FeatureResult<ExampleState> {
+    const triggerCount = context.featureState.read().triggerCount + 1;
+    return createFeatureResult<ExampleState>({
+      triggered: true,
+      emittedEvents: [{ name: "example:triggered", payload: { triggerCount } }],
+      featureStateUpdates: [{ state: { triggerCount }, strategy: "merge" }],
+      telemetry: { triggerCount },
+    });
+  }
+
+  update(_context: FeatureContext<ExampleState>, _deltaMs: number): FeatureResult<ExampleState> {
+    return createFeatureResult<ExampleState>();
+  }
+
+  serialize(): ExampleState { return structuredClone(this.state); }
+  deserialize(state: ExampleState): void { this.state = structuredClone(state); }
+
+  cleanup(_context: FeatureContext<ExampleState>): FeatureResult<ExampleState> {
+    return createFeatureResult<ExampleState>();
+  }
 }
 ```
 
-Keep feature state JSON-safe and deterministic. Do not store DOM nodes, functions, class instances, timers, random generators, or transport clients inside serialized state.
+Lifecycle methods return explicit results. The runner applies feature-local updates and returns emitted events, animation-command data, shared-state proposals, warnings, telemetry, continuation instructions, and failures to the host. A feature never mutates controller state or executes an animation directly.
 
-## Register and load
+## 2. Register and execute
 
-Use `FeatureLoader` to load feature instances or factories sequentially:
+Use `registerMany()` when loading related features so their dependency graph is validated as one candidate set. Subscribe before registration when initial events matter.
 
 ```ts
-const registry = new FeatureRegistry();
-await new FeatureLoader().load(registry, [
-  () => new ExampleFeature(),
-  () => import("./another-feature.js").then(({ AnotherFeature }) => new AnotherFeature()),
-]);
+import {
+  FeatureRegistry,
+  FeatureRunner,
+  SequenceRandomSource,
+  gameManifestId,
+  type FeatureRunnerContextInput,
+} from "@hustle/core";
+
+const GAME_ID = gameManifestId("example-game-pack");
+const registry = new FeatureRegistry({ engineId: ENGINE_ID });
+
+registry.events.subscribe("feature:failed", ({ error }) => {
+  console.error(error.code, error.message);
+});
+
+registry.registerMany([{
+  manifest: EXAMPLE_FEATURE_MANIFEST,
+  implementation: new ExampleFeature(),
+}]);
+
+const runner = new FeatureRunner(registry);
+const context: FeatureRunnerContextInput = {
+  roundId: "round-001",
+  eventId: "event-001",
+  engineId: ENGINE_ID,
+  gameId: GAME_ID,
+  currentLifecycleState: "presenting",
+  roundData: { outcomeAlreadyProvidedByServer: true },
+  sharedPresentationState: {},
+  random: new SequenceRandomSource([0.25, 0.75]),
+  logicalTick: 1,
+  metadata: { source: "example" },
+};
+
+await runner.initializeRound(context);
+const execution = await runner.execute(context);
+
+// The engine controller validates and applies execution.result.
+console.log(execution.executionOrder, execution.result.animationCommands);
 ```
 
-Registration rejects duplicate IDs. Loading validates that every declared dependency exists and that no dependency cycle is present.
+Do not call `Math.random()` or read ambient time inside a feature. Random values and logical time come from the controlled context.
 
-## Deterministic execution
+## 3. Deterministic ordering
 
-The registry calculates one stable topological order:
+The registry resolves one stable topological order:
 
-1. dependencies always execute before dependants;
-2. otherwise, higher priority executes first;
-3. equal priority uses registration order;
-4. feature ID is the final stable tie-breaker.
+1. required dependencies execute before their dependants;
+2. among ready features, lower numeric priority executes first;
+3. equal priorities use feature ID in ASCII lexical order.
 
-Initialization, trigger evaluation, triggering, and updates use that order. Cleanup uses its reverse. `canTrigger()` must be deterministic for the same context and state. A feature must never generate or alter a real-money outcome in the presentation client.
+Optional dependencies participate in ordering when present. Registration order and locale-sensitive comparison never affect execution. Disabling an enabled required dependency or enabling an active conflict is rejected.
 
-## Context and events
+## 4. Save and recover state
 
-`FeatureContext` supplies an engine ID, deterministic tick, JSON-safe input, a feature-event emitter, and read-only access to serialized dependency state. Engine adapters should construct it with `createFeatureContext()`.
+`FeatureSerializer` stores every registered feature's implementation version, state version, enabled status, lifecycle, state, execution count, last order, warnings, recoverable errors, and completed-execution IDs.
 
-Feature events are ordered with a monotonic sequence number. They are suitable for debug inspection and deterministic presentation orchestration, not outcome generation.
+```ts
+import { FeatureSerializer } from "@hustle/core";
 
-## Serialize and restore
+const serializer = new FeatureSerializer();
+const snapshotJson = serializer.serialize(registry, {
+  engineId: ENGINE_ID,
+  gameId: GAME_ID,
+  roundId: context.roundId,
+  eventId: context.eventId,
+  logicalTick: context.logicalTick,
+  executionLedger: runner.executionLedger,
+}, true);
 
-`FeatureSerializer` produces a versioned snapshot containing engine ID, feature ID, feature implementation version, enabled state, and JSON-safe state. Restoration rejects unknown features, duplicate IDs, invalid schema versions, dependency violations, and feature-version mismatches.
+await registry.resetRuntimeState();
+runner.clearExecutionLedger();
 
-Feature migrations are intentionally out of scope for Task 003. Change a feature version whenever its serialized state shape becomes incompatible; add an explicit migration layer before accepting older snapshots.
+const restored = await serializer.restore(registry, snapshotJson, {
+  engineId: ENGINE_ID,
+  gameId: GAME_ID,
+});
+runner.restoreExecutionLedger(restored.executionLedger);
+```
 
-## Compatibility and disabling
+Restore validates and migrates the entire candidate before changing the live registry. Failure leaves the prior valid runtime intact. Restoring the execution ledger prevents completed work from replaying. Register deterministic state migrations with `serializer.registerMigration(...)` when supporting an older state version.
 
-Use `supportedEngines` to declare compatibility. `"*"` means engine-agnostic. Discovery and execution can be scoped to an engine ID. Disabling a required dependency while its dependant remains enabled makes execution invalid by design; either disable dependants first or keep the dependency active.
+## Failure policy and cleanup
 
-## Design rules
+- `blocking` is fail-fast: the operation stops and control returns to the engine.
+- `non-blocking` is opt-in isolation: the failure is reported and independent later features may continue.
+- Required dependants do not execute as though a failed dependency succeeded.
+- `runner.cleanup(...)` attempts cleanup in reverse deterministic order, including after failures.
 
-- Feature IDs are permanent and globally unique inside Hustle Engine.
-- Metadata is descriptive; concrete game packs must not redefine shared feature behavior.
-- Serialized state must be JSON-safe and free of currency floats.
-- The frontend presents server-provided outcomes and never controls wagering results.
-- Placeholder implementations must not be mistaken for production-ready mechanics.
-- New features require registration, ordering, lifecycle, cleanup, and round-trip serialization tests.
+## Events and debugging
+
+The registry exposes the 14 typed Feature SDK events through Hustle Core's `TypedEventBus`. `FeatureDebugAdapter` provides a DOM-free projection of manifests, implementations, enabled state, order, serialized state, events, warnings, errors, and execution counts for the Hustle Debug Panel and Engine Playground.
+
+The six exported example features and their manifests are non-production architecture fixtures only. They emit simple events, counters, commands, and telemetry; they implement no commercial mechanic.
+
+## Rules for production features
+
+- Keep IDs permanent, lowercase, kebab-case, and globally unique.
+- Keep serialized state minimal, JSON-safe, and versioned.
+- Return commands and state proposals; never render, animate, or mutate the engine directly.
+- Keep RouteRun mechanics in `packages/routerun` and Night Drop presentation/configuration in `apps/night-drop`.
+- Never implement wallet, RNG, wagering, certified math, RTP, or Stake transport behavior in this SDK.
+- Add tests for binding validation, compatibility, ordering, lifecycle, failure policy, cleanup, serialization, recovery, and migrations.

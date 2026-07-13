@@ -1,4 +1,6 @@
 import type { RecoverySnapshot, RoundStatus, TransitionRecord } from "./contracts.js";
+import type { FeatureDebugSnapshot } from "./features/feature-debug.js";
+import type { FeatureManifestId } from "./manifests/manifest-types.js";
 
 export interface DebugPanelState {
   readonly currentState: RoundStatus;
@@ -39,6 +41,28 @@ export interface DebugPanelOptions {
   readonly mount?: HTMLElement;
   readonly initiallyOpen?: boolean;
   readonly title?: string;
+  readonly features?: DebugPanelFeatureIntegration;
+}
+
+export interface DebugPanelFeatureActions {
+  readonly loadExamples: () => void | Promise<void>;
+  readonly setEnabled: (id: FeatureManifestId | string, enabled: boolean) => void | Promise<void>;
+  readonly executeEligible: () => void | Promise<void>;
+  readonly compareDeterministicRuns: () => void | Promise<void>;
+  readonly serializeStates: () => void | Promise<void>;
+  readonly clearRuntimeState: () => void | Promise<void>;
+  readonly restoreStates: () => void | Promise<void>;
+  readonly loadMissingDependency: () => void | Promise<void>;
+  readonly loadCircularDependency: () => void | Promise<void>;
+  readonly loadConflict: () => void | Promise<void>;
+  readonly simulateBlockingFailure: () => void | Promise<void>;
+  readonly simulateNonBlockingFailure: () => void | Promise<void>;
+  readonly clearRegistry: () => void | Promise<void>;
+}
+
+export interface DebugPanelFeatureIntegration {
+  readonly getState: () => FeatureDebugSnapshot;
+  readonly actions: DebugPanelFeatureActions;
 }
 
 export interface DebugEventRecord {
@@ -84,7 +108,7 @@ export class HustleDebugPanel {
     this.root.className = "hustle-debug-shell";
     this.root.dataset.open = String(this.open);
     this.root.setAttribute("aria-label", "Hustle Engine Debug Panel");
-    this.root.innerHTML = panelMarkup(options.title ?? "HUSTLE DEBUG");
+    this.root.innerHTML = panelMarkup(options.title ?? "HUSTLE DEBUG", options.features !== undefined);
     this.panel = requireElement(this.root, ".hdebug-panel");
     (options.mount ?? document.body).append(this.root);
     this.bindInteractions();
@@ -151,6 +175,15 @@ export class HustleDebugPanel {
         return;
       }
       const action = target.dataset.debugAction;
+      const featureId = target.dataset.debugFeatureId;
+      if (featureId && this.options.features) {
+        const enabled = target.dataset.debugFeatureEnabled === "true";
+        void this.runFeatureAction(
+          () => this.options.features?.actions.setEnabled(featureId, !enabled),
+          `feature:${enabled ? "disable" : "enable"}`,
+        );
+        return;
+      }
       if (action === "clear-events") {
         this.events.length = 0;
         this.eventTimes.length = 0;
@@ -196,6 +229,20 @@ export class HustleDebugPanel {
       bad: this.options.actions.generateBadRound,
       "animation-failure": this.options.actions.generateAnimationFailure,
       "recovery-test": this.options.actions.generateRecoveryTest,
+      ...(this.options.features ? {
+        "feature-load": this.options.features.actions.loadExamples,
+        "feature-execute": this.options.features.actions.executeEligible,
+        "feature-compare": this.options.features.actions.compareDeterministicRuns,
+        "feature-serialize": this.options.features.actions.serializeStates,
+        "feature-clear-state": this.options.features.actions.clearRuntimeState,
+        "feature-restore": this.options.features.actions.restoreStates,
+        "feature-missing": this.options.features.actions.loadMissingDependency,
+        "feature-cycle": this.options.features.actions.loadCircularDependency,
+        "feature-conflict": this.options.features.actions.loadConflict,
+        "feature-blocking": this.options.features.actions.simulateBlockingFailure,
+        "feature-non-blocking": this.options.features.actions.simulateNonBlockingFailure,
+        "feature-clear": this.options.features.actions.clearRegistry,
+      } : {}),
     };
     const selected = actions[action];
     if (!selected) return;
@@ -203,6 +250,14 @@ export class HustleDebugPanel {
       await selected();
     } catch (error) {
       this.recordEvent("debug:action-failed", { action, error: error instanceof Error ? error.message : String(error) });
+    }
+    this.render();
+  }
+
+  private async runFeatureAction(action: () => void | Promise<void> | undefined, name: string): Promise<void> {
+    try { await action(); }
+    catch (error) {
+      this.recordEvent("debug:action-failed", { action: name, error: error instanceof Error ? error.message : String(error) });
     }
     this.render();
   }
@@ -233,7 +288,36 @@ export class HustleDebugPanel {
     this.set("frame", `${this.performance.frameTime} ms`);
     this.set("average-frame", `${this.performance.averageFrameTime} ms`);
     this.set("worst-frame", `${this.performance.worstFrame} ms`);
+    this.renderFeatures();
     this.renderEvents();
+  }
+
+  private renderFeatures(): void {
+    const integration = this.options.features;
+    if (!integration) return;
+    const snapshot = integration.getState();
+    this.set("feature-count", `${snapshot.registeredFeatures.length}`);
+    this.set("feature-order", snapshot.executionOrder.join(" → ") || "No enabled features");
+    this.set("feature-state", snapshot.serializedState ? JSON.stringify(snapshot.serializedState, null, 2) : "Not serialized");
+    this.set("feature-events", snapshot.latestEvents.map(({ type }) => type).join("\n") || "No feature events");
+    this.set("feature-errors", snapshot.latestErrors.map(({ error }) => `[${error.code}] ${error.message}`).join("\n") || "No feature errors");
+    this.set("feature-warnings", snapshot.latestWarnings.map(({ warning }) => `[${warning.code}] ${warning.message}`).join("\n") || "No feature warnings");
+    const list = this.root.querySelector<HTMLElement>("[data-debug-feature-list]");
+    if (!list) return;
+    list.replaceChildren(...snapshot.registeredFeatures.map((feature) => {
+      const row = document.createElement("div");
+      row.className = "hdebug-feature-row";
+      const details = document.createElement("span");
+      details.innerHTML = `<strong>${escapeHtml(feature.id)}</strong><small>${escapeHtml(feature.lifecycleStatus)} · p${feature.priority} · ${feature.executionCount} run${feature.executionCount === 1 ? "" : "s"}</small>`;
+      const toggle = document.createElement("button");
+      toggle.dataset.debugFeatureId = feature.id;
+      toggle.dataset.debugFeatureEnabled = String(feature.enabled);
+      toggle.textContent = feature.enabled ? "Disable" : "Enable";
+      toggle.setAttribute("aria-label", `${toggle.textContent} ${feature.name}`);
+      row.append(details, toggle);
+      return row;
+    }));
+    if (snapshot.registeredFeatures.length === 0) list.textContent = "No features registered";
   }
 
   private renderEvents(): void {
@@ -271,7 +355,7 @@ export function installHustleDebugPanel(options: DebugPanelOptions): HustleDebug
   return new HustleDebugPanel(options);
 }
 
-function panelMarkup(title: string): string {
+function panelMarkup(title: string, includeFeatures: boolean): string {
   return `
     <button class="hdebug-edge" data-debug-toggle aria-label="Toggle debug panel" aria-expanded="true"><span>DEBUG</span><b>⌘⇧D</b></button>
     <div class="hdebug-panel">
@@ -281,6 +365,7 @@ function panelMarkup(title: string): string {
           ["Current State", "state"], ["Current Round", "round"], ["Current Event", "event"], ["FPS", "fps"],
           ["Delta Time", "delta"], ["Current Animation", "animation"], ["Animation Queue Length", "queue"],
         ]))}
+        ${includeFeatures ? featureSection() : ""}
         ${section("MEMORY", rows([["Current Snapshot", "snapshot", "pre"], ["Last Save", "last-save"], ["Recovery Version", "recovery-version"]]))}
         ${section("EVENTS", `<input data-debug-filter type="search" placeholder="Filter events" aria-label="Filter events"><div class="hdebug-event-actions">${button("toggle-stream", "Pause Event Stream")}${button("clear-events", "Clear Log")}</div><div class="hdebug-event-log" data-debug-value="event-log"></div>`)}
         ${section("ANIMATIONS", actionGrid([["pause", "Pause"], ["resume", "Resume"], ["skip", "Skip"], ["skip-all", "Skip All"], ["replay", "Replay Last Round"]]))}
@@ -291,6 +376,30 @@ function panelMarkup(title: string): string {
         ${section("TESTING", actionGrid([["small", "Generate Small Round"], ["medium", "Generate Medium Round"], ["huge", "Generate Huge Round"], ["bad", "Generate Bad Round"], ["animation-failure", "Generate Animation Failure"], ["recovery-test", "Generate Recovery Test"]]))}
       </div>
     </div>`;
+}
+
+function featureSection(): string {
+  return section("FEATURES", `${rows([
+    ["Registered", "feature-count"],
+    ["Execution Order", "feature-order", "pre"],
+    ["Serialized State", "feature-state", "pre"],
+    ["Latest Events", "feature-events", "pre"],
+    ["Latest Errors", "feature-errors", "pre"],
+    ["Latest Warnings", "feature-warnings", "pre"],
+  ])}<div class="hdebug-feature-list" data-debug-feature-list></div>${actionGrid([
+    ["feature-load", "Load Examples"],
+    ["feature-execute", "Execute Eligible"],
+    ["feature-compare", "Compare Two Runs"],
+    ["feature-serialize", "Serialize States"],
+    ["feature-clear-state", "Clear Runtime State"],
+    ["feature-restore", "Restore States"],
+    ["feature-missing", "Missing Dependency"],
+    ["feature-cycle", "Circular Dependency"],
+    ["feature-conflict", "Conflict"],
+    ["feature-blocking", "Blocking Failure"],
+    ["feature-non-blocking", "Non-blocking Failure"],
+    ["feature-clear", "Clear Registry"],
+  ])}`);
 }
 
 function section(title: string, body: string): string {
@@ -373,6 +482,7 @@ const DEBUG_PANEL_CSS: string = `
 .hdebug-event-actions{display:flex;gap:7px;margin:8px 0}.hdebug-event-actions button{flex:1}.hdebug-event-actions button[data-active=true]{border-color:#e5aa55;color:#ffdca4}
 .hdebug-event-log{min-height:100px;max-height:250px;overflow:auto;background:#080b10;border:1px solid #1c2330;border-radius:6px;padding:4px;color:#647087;font:9px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
 .hdebug-event{display:grid;grid-template-columns:54px minmax(88px,auto) 1fr;gap:6px;padding:5px;border-bottom:1px solid #151b25}.hdebug-event span{color:#4f5b6f}.hdebug-event strong{color:#73d7bd;font-weight:600}.hdebug-event code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#8996aa}
+.hdebug-feature-list{display:grid;gap:6px;margin:9px 0}.hdebug-feature-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #222d3d;border-radius:6px;background:#0a0e15;padding:8px}.hdebug-feature-row span{min-width:0;display:grid;gap:3px}.hdebug-feature-row strong{overflow-wrap:anywhere;color:#c7d2e1;font:9px ui-monospace,SFMono-Regular,Menlo,monospace}.hdebug-feature-row small{color:#718096;font-size:8px}.hdebug-feature-row button{flex:0 0 auto;border:1px solid #2f4e50;border-radius:5px;background:#15282a;color:#8de6cf;padding:5px 7px;font:700 8px inherit;cursor:pointer}
 @media(max-width:600px){.hustle-debug-shell{width:min(360px,90vw)}.hdebug-edge{top:60px}}
 @media(prefers-reduced-motion:reduce){.hdebug-panel{transition:none}}
 `;

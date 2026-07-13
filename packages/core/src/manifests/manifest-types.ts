@@ -71,7 +71,11 @@ export interface FeatureManifest extends ManifestBase<"feature", FeatureManifest
   readonly description: string;
   readonly supportedEngineIds: readonly EngineManifestId[];
   readonly dependencies: readonly FeatureManifestId[];
+  /** Optional for schema 1.0.0 compatibility; runtimes normalize an omitted value to an empty list. */
+  readonly optionalDependencies?: readonly FeatureManifestId[];
   readonly conflicts: readonly FeatureManifestId[];
+  /** Optional for schema 1.0.0 compatibility; runtimes default to blocking. */
+  readonly failurePolicy?: "blocking" | "non-blocking";
   readonly priority: number;
   readonly deterministic: boolean;
   readonly stateVersion: string;

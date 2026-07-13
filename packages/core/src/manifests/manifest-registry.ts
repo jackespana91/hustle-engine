@@ -194,7 +194,7 @@ export function deterministicFeatureOrder(features: readonly FeatureManifest[]):
   while (remaining.size > 0) {
     const ready = [...remaining].map((id) => byId.get(id)).filter((feature): feature is FeatureManifest => feature !== undefined)
       .filter((feature) => feature.dependencies.every((dependency) => !byId.has(dependency) || resolved.some(({ id }) => id === dependency)))
-      .sort((left, right) => right.priority - left.priority || compareAscii(left.id, right.id));
+      .sort((left, right) => left.priority - right.priority || compareAscii(left.id, right.id));
     const next = ready[0];
     if (!next) throw new ManifestSystemError([manifestError("CIRCULAR_DEPENDENCY", "Feature dependencies contain a cycle", "feature", "dependencies")]);
     resolved.push(next); remaining.delete(next.id);

@@ -73,6 +73,8 @@ export interface RecoverySnapshot {
   readonly currentCommand: AnimationCommand | null;
   readonly transitionHistory: readonly TransitionRecord[];
   readonly presentationProgress: PresentationProgress;
+  /** Optional, engine-agnostic Feature SDK state captured at the same recovery boundary. */
+  readonly featureRuntime?: import("./features/feature-types.js").FeatureRuntimeSnapshot;
 }
 
 export interface EngineEventMap {

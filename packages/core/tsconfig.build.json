@@ -8,6 +8,6 @@
     "rootDir": ".",
     "types": []
   },
-  "include": ["src/**/*.ts", "features/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "exclude": ["test/**/*.ts"]
 }

@@ -166,6 +166,8 @@ function validateGame(input: Record<string, unknown>, issue: Issue): void {
 function validateFeature(input: Record<string, unknown>, issue: Issue): void {
   ["description", "stateVersion"].forEach((field) => requiredString(input, field, issue));
   ["supportedEngineIds", "dependencies", "conflicts"].forEach((field) => idArray(input, field, issue));
+  if (input.optionalDependencies !== undefined) idArray(input, "optionalDependencies", issue);
+  if (input.failurePolicy !== undefined && input.failurePolicy !== "blocking" && input.failurePolicy !== "non-blocking") issue("INVALID_VALUE", "Feature failure policy must be blocking or non-blocking", "failurePolicy");
   requiredInteger(input, "priority", issue);
   requiredBoolean(input, "deterministic", issue);
   if (typeof input.stateVersion === "string" && !isSemanticVersion(input.stateVersion)) issue("INVALID_VERSION", `Invalid state version ${input.stateVersion}`, "stateVersion");
