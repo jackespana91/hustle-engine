@@ -27,6 +27,7 @@ export const NIGHT_DROP_FEATURE_IDS = {
 
 export const NIGHT_DROP_ASSET_IDS = {
   dash: assetFileId("character.dash"),
+  mara: assetFileId("character.mara"),
   clamp: assetFileId("character.clamp"),
   street: assetFileId("tile.street"),
   destination: assetFileId("tile.destination"),
@@ -34,4 +35,12 @@ export const NIGHT_DROP_ASSET_IDS = {
   package: assetFileId("overlay.package"),
   neon: assetFileId("effect.neon"),
   shortcut: assetFileId("effect.shortcut"),
+  routeTrace: assetFileId("effect.route-trace"),
+  packagePickup: assetFileId("effect.package-pickup"),
+  fiveStar: assetFileId("effect.five-star"),
+  clampWarning: assetFileId("effect.clamp-warning"),
+  expansion: assetFileId("effect.expansion"),
+  cascade: assetFileId("effect.cascade"),
+  destinationArrival: assetFileId("effect.destination"),
+  win: assetFileId("effect.win"),
 } as const;
