@@ -15,7 +15,22 @@ import {
 } from "@hustle/routerun";
 import type { NightDropRunnerPlan, RunnerTimelineBeat } from "./runner-plan.js";
 import { createNightDropBuilding } from "./night-drop-building-kit.js";
-import { createNightDropDashRig, type NightDropDashParts } from "./night-drop-dash-rig.js";
+import { NightDropDashActor } from "./night-drop-dash-actor.js";
+import { resolveNightDropDistrict } from "./night-drop-districts.js";
+import { NightDropRunnerEffects } from "./night-drop-runner-effects.js";
+import type { NightDropRunnerFeedbackCue } from "./night-drop-runner-feedback.js";
+import { createNightDropStreetModule } from "./night-drop-street-kit.js";
+import {
+  NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
+  NightDropRunnerProductionLoader,
+  disposeNightDropProductionObject,
+  resolveNightDropEnvironmentRole,
+  selectNightDropRunnerLod,
+  validateNightDropRunnerProductionManifest,
+  type NightDropEnvironmentRole,
+  type NightDropRunnerLod,
+  type NightDropRunnerProductionManifest,
+} from "./night-drop-runner-assets.js";
 
 interface WorldPackage {
   readonly root: THREE.Group;
@@ -29,6 +44,12 @@ interface WorldObstacle {
 
 const CITY_LABELS = ["OPEN LATE", "24/7", "NIGHT MART", "GLASSHOUSE", "SERVICE", "DELIVERIES"] as const;
 
+export interface NightDropRunnerWorldOptions {
+  readonly productionAssets?: boolean;
+  readonly productionManifest?: NightDropRunnerProductionManifest;
+  readonly onPresentationCue?: (cue: NightDropRunnerFeedbackCue) => void;
+}
+
 export class NightDropRunnerWorld {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -37,8 +58,11 @@ export class NightDropRunnerWorld {
   private readonly route: ComposedSpatialRoute;
   private readonly path: THREE.CatmullRomCurve3;
   private readonly timeline: readonly RunnerTimelineBeat[];
-  private readonly runner = createNightDropDashRig();
-  private readonly runnerParts: NightDropDashParts;
+  private readonly renderLod: NightDropRunnerLod;
+  private readonly effects: NightDropRunnerEffects;
+  private readonly onPresentationCue: ((cue: NightDropRunnerFeedbackCue) => void) | undefined;
+  private readonly dashActor = new NightDropDashActor();
+  private readonly runner = this.dashActor.root;
   private readonly runnerController: SpatialRunnerController;
   private readonly routeMarkers = new THREE.Group();
   private readonly junctions: THREE.Group;
@@ -71,18 +95,30 @@ export class NightDropRunnerWorld {
   private readonly obstacleWarning: HTMLElement | null;
   private readonly obstacleResult: HTMLElement | null;
   private decisionUiKey = "";
+  private reportedObstacleInteractions = 0;
+  private disposed = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly stage: HTMLElement,
     plan: NightDropRunnerPlan,
+    options: NightDropRunnerWorldOptions = {},
   ) {
     this.route = plan.spatialRoute;
     this.timeline = plan.timeline;
     this.path = createRoutePath(this.route);
+    const deviceMemoryGb = (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory;
+    this.renderLod = selectNightDropRunnerLod({
+      viewportWidth: Math.max(1, this.stage.clientWidth || window.innerWidth),
+      pixelRatio: window.devicePixelRatio || 1,
+      compact: window.matchMedia("(max-width: 540px), (max-height: 700px)").matches,
+      ...(deviceMemoryGb ? { deviceMemoryGb } : {}),
+    });
+    this.effects = new NightDropRunnerEffects(this.renderLod);
+    this.onPresentationCue = options.onPresentationCue;
     this.runnerController = new SpatialRunnerController(this.route);
     this.junctions = createJunctionGeometry(this.path, this.route);
-    this.city = createCity(this.path, this.route);
+    this.city = createCity(this.path, this.route, this.renderLod);
     this.branchButtons = [...this.stage.querySelectorAll<HTMLButtonElement>("[data-branch]")];
     this.junctionPrompt = this.stage.querySelector<HTMLElement>("[data-junction-prompt]");
     this.junctionWarning = this.stage.querySelector<HTMLElement>("[data-junction-warning]");
@@ -103,8 +139,8 @@ export class NightDropRunnerWorld {
     this.stage.dataset.renderer = "three";
     this.stage.dataset.routeId = plan.routeId;
     this.stage.dataset.routeLength = String(Math.round(this.route.totalLength));
+    this.stage.dataset.renderLod = this.renderLod;
 
-    this.runnerParts = this.runner.userData.parts as NightDropDashParts;
     this.packages = this.route.cues.filter(({ kind }) => kind === "standard-pickup" || kind === "premium-pickup").map((cue) => ({
       root: createPackage(cue.progress, cue.laneOffset, cue.kind === "premium-pickup", this.path),
       collectedAtMs: timeAtProgress(cue.progress, this.timeline),
@@ -112,6 +148,7 @@ export class NightDropRunnerWorld {
     this.obstacles = this.route.obstacles.map((obstacle) => ({ root: createObstacle(obstacle), obstacle }));
 
     this.buildScene();
+    this.configureProductionAssets(options);
     window.addEventListener("resize", this.resize);
     this.resize();
     this.updateWorld(0, true);
@@ -124,6 +161,7 @@ export class NightDropRunnerWorld {
     this.elapsedMs = 0;
     this.visualLaneOffset = 0;
     this.lastWorldElapsedMs = 0;
+    this.reportedObstacleInteractions = 0;
     this.speed = normalizeSpeed(speed);
     this.startedAt = performance.now();
     this.lastFrameAt = this.startedAt;
@@ -152,6 +190,7 @@ export class NightDropRunnerWorld {
     this.elapsedMs = 0;
     this.visualLaneOffset = 0;
     this.lastWorldElapsedMs = 0;
+    this.reportedObstacleInteractions = 0;
     this.runnerController.reset();
     this.updateWorld(0, true);
   }
@@ -201,12 +240,15 @@ export class NightDropRunnerWorld {
     this.running = false;
     const state = this.runnerController.restore(snapshot);
     this.elapsedMs = state.elapsedMs;
+    this.reportedObstacleInteractions = state.obstacleInteractions.length;
     this.updateWorld(this.elapsedMs, true);
   }
 
   dispose(): void {
     this.stopFrame();
+    this.disposed = true;
     window.removeEventListener("resize", this.resize);
+    this.dashActor.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((object) => {
@@ -233,6 +275,11 @@ export class NightDropRunnerWorld {
     readonly activeSegmentIds: readonly string[];
     readonly averageFrameTimeMs: number;
     readonly worstFrameTimeMs: number;
+    readonly renderCalls: number;
+    readonly renderedTriangles: number;
+    readonly geometries: number;
+    readonly textures: number;
+    readonly dashAsset: ReturnType<NightDropDashActor["inspect"]>;
   } {
     const runnerState = this.runnerController.inspect();
     const window = resolveSpatialRouteWindow(this.route, runnerState.progress);
@@ -246,7 +293,88 @@ export class NightDropRunnerWorld {
       activeSegmentIds: window.activeSegmentIds,
       averageFrameTimeMs: average(this.frameTimes),
       worstFrameTimeMs: Math.max(0, ...this.frameTimes),
+      renderCalls: this.renderer.info.render.calls,
+      renderedTriangles: this.renderer.info.render.triangles,
+      geometries: this.renderer.info.memory.geometries,
+      textures: this.renderer.info.memory.textures,
+      dashAsset: this.dashActor.inspect(),
     };
+  }
+
+  private configureProductionAssets(options: NightDropRunnerWorldOptions): void {
+    const manifest = options.productionManifest ?? NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST;
+    validateNightDropRunnerProductionManifest(manifest);
+    this.stage.dataset.productionAssets = String(options.productionAssets === true);
+    this.stage.dataset.dashAssetMode = this.dashActor.inspect().mode;
+    if (!options.productionAssets) return;
+    const loader = new NightDropRunnerProductionLoader();
+    void this.dashActor.loadProduction(loader, manifest.character).then((status) => {
+      if (this.disposed) return;
+      this.stage.dataset.dashAssetMode = status.mode;
+      this.stage.dataset.dashAssetFallback = String(Boolean(status.fallbackReason));
+      this.stage.dataset.dashAnimationCount = String(status.availableAnimationRoles.length);
+    });
+    void this.loadProductionEnvironment(loader, manifest);
+  }
+
+  private async loadProductionEnvironment(
+    loader: NightDropRunnerProductionLoader,
+    manifest: NightDropRunnerProductionManifest,
+  ): Promise<void> {
+    const specifications = new Map(manifest.environment.map((asset) => [asset.role, asset]));
+    const segmentsByRole = new Map<NightDropEnvironmentRole, ComposedSpatialRouteSegment[]>();
+    this.route.segments.forEach((segment) => {
+      const role = resolveNightDropEnvironmentRole(this.route, segment);
+      const segments = segmentsByRole.get(role) ?? [];
+      segments.push(segment);
+      segmentsByRole.set(role, segments);
+    });
+    const loaded = await Promise.all([...segmentsByRole.keys()].map(async (role) => {
+      const spec = specifications.get(role);
+      if (!spec) return { role, spec: null, root: null } as const;
+      try {
+        return { role, spec, root: await loader.loadEnvironment(spec, this.renderLod) } as const;
+      } catch {
+        return { role, spec, root: null } as const;
+      }
+    }));
+    if (this.disposed) {
+      loaded.forEach(({ root }) => { if (root) disposeNightDropProductionObject(root); });
+      return;
+    }
+    let installedSegments = 0;
+    let missingRoles = 0;
+    loaded.forEach(({ role, spec, root }) => {
+      if (!spec || !root) {
+        missingRoles += 1;
+        return;
+      }
+      (segmentsByRole.get(role) ?? []).forEach((segment, index) => {
+        const instance = index === 0 ? root : root.clone(true);
+        const progress = ((segment.startDistance + segment.endDistance) / 2) / this.route.totalLength;
+        const point = this.path.getPointAt(progress);
+        const tangent = this.path.getTangentAt(progress).normalize();
+        instance.position.copy(point);
+        instance.lookAt(point.clone().add(tangent));
+        instance.scale.multiply(new THREE.Vector3(
+          THREE.MathUtils.clamp((segment.width * 2) / spec.footprint.width, .7, 1.45),
+          1,
+          THREE.MathUtils.clamp((segment.endDistance - segment.startDistance) / spec.footprint.length, .65, 2.6),
+        ));
+        instance.userData.segmentId = segment.id;
+        instance.userData.productionEnvironment = true;
+        this.city.children.forEach((object) => {
+          if (object.userData.segmentId === segment.id && !object.userData.productionEnvironment) {
+            object.userData.productionReplaced = true;
+          }
+        });
+        this.city.add(instance);
+        installedSegments += 1;
+      });
+    });
+    this.stage.dataset.environmentAssetMode = installedSegments > 0 ? "production" : "proxy";
+    this.stage.dataset.environmentAssetSegments = String(installedSegments);
+    this.stage.dataset.environmentAssetMissingRoles = String(missingRoles);
   }
 
   private buildScene(): void {
@@ -270,6 +398,7 @@ export class NightDropRunnerWorld {
     this.buildRouteMarkers();
     this.scene.add(this.routeMarkers);
     this.scene.add(this.runner);
+    this.scene.add(this.effects.root);
     this.packages.forEach(({ root }) => this.scene.add(root));
     this.obstacles.forEach(({ root }) => this.scene.add(root));
 
@@ -337,6 +466,12 @@ export class NightDropRunnerWorld {
       collectedCueIds: this.route.cues.filter((cue) => cue.progress <= progress && (cue.kind === "standard-pickup" || cue.kind === "premium-pickup")).map(({ id }) => id),
       status: elapsedMs >= phaseAt(this.timeline, "resolved") ? "resolved" : elapsedMs >= phaseAt(this.timeline, "arrival") ? "arrived" : moving ? "running" : "idle",
     });
+    if (!snapCamera && runnerState.obstacleInteractions.length > this.reportedObstacleInteractions) {
+      runnerState.obstacleInteractions.slice(this.reportedObstacleInteractions).forEach(({ result }) => {
+        this.onPresentationCue?.(result === "cleared" ? "obstacle-clear" : "obstacle-hit");
+      });
+      this.reportedObstacleInteractions = runnerState.obstacleInteractions.length;
+    }
     const branchDisplacement = resolveSpatialBranchDisplacement(this.route, runnerState.branchSelections, progress);
     const decision = resolveSpatialJunctionDecision(this.route, progress);
     const travelledDistance = progress * this.route.totalLength;
@@ -379,18 +514,28 @@ export class NightDropRunnerWorld {
 
     this.runner.position.copy(point).add(new THREE.Vector3(0, bob, 0));
     this.runner.lookAt(point.clone().add(travelTangent).add(new THREE.Vector3(0, bob, 0)));
-    this.runnerParts.leftLeg.rotation.x = stride * .72;
-    this.runnerParts.rightLeg.rotation.x = -stride * .72;
-    this.runnerParts.leftArm.rotation.x = -stride * .58;
-    this.runnerParts.rightArm.rotation.x = stride * .58;
     const dodgeLean = runnerState.action === "dodging-left" ? -.22 : runnerState.action === "dodging-right" ? .22 : 0;
-    this.runnerParts.torso.rotation.z = (moving ? stride * .025 : 0) + dodgeLean + hitStrength * Math.sin(elapsedMs * .07) * .12;
-    this.runnerParts.backpack.rotation.z = moving ? -stride * .03 : 0;
-    this.runnerParts.head.rotation.y = moving ? Math.sin(elapsedMs * .0065) * .035 : -.06;
-    this.runnerParts.head.rotation.z = dodgeLean * .18 + hitStrength * Math.sin(elapsedMs * .08) * .05;
-    this.runnerParts.hair.rotation.x = moving ? -.05 - Math.abs(stride) * .045 : 0;
-    this.runnerParts.jacketTail.rotation.x = moving ? .16 + Math.abs(stride) * .16 + runningBlend * .08 : .04;
-    this.runnerParts.jacketTail.rotation.z = moving ? stride * .035 : 0;
+    this.dashActor.update({
+      frameDeltaMs,
+      elapsedMs,
+      moving,
+      action: runnerState.action,
+      stride,
+      dodgeLean,
+      hitStrength,
+      clearStrength,
+      runningBlend,
+    });
+    this.effects.update({
+      position: this.runner.position,
+      tangent: travelTangent,
+      elapsedMs,
+      moving,
+      runningBlend,
+      clearStrength,
+      hitStrength,
+      compact: this.compactRenderMode,
+    });
     this.runner.scale.set(.82 + clearStrength * .035, runnerState.action === "sliding" ? .52 : .82 - hitStrength * .08, .82 + hitStrength * .05);
 
     const cameraDistance = (moving ? 8.85 - runningBlend * 1.2 : 8.85) + junctionAnticipation * 1.15 + obstacleAnticipation * .45;
@@ -472,7 +617,9 @@ export class NightDropRunnerWorld {
       ? { distanceBehind: 24, distanceAhead: 92 }
       : { distanceBehind: 42, distanceAhead: 128 });
     const activeSegments = new Set(routeWindow.activeSegmentIds);
-    this.city.children.forEach((object) => { object.visible = activeSegments.has(String(object.userData.segmentId ?? "")); });
+    this.city.children.forEach((object) => {
+      object.visible = activeSegments.has(String(object.userData.segmentId ?? "")) && object.userData.productionReplaced !== true;
+    });
     this.stage.dataset.activeSegments = routeWindow.activeSegmentIds.join(",");
     this.stage.dataset.lane = String(runnerState.lane);
     this.stage.dataset.visualLaneOffset = this.visualLaneOffset.toFixed(3);
@@ -510,7 +657,7 @@ export class NightDropRunnerWorld {
         ? latestInteraction?.result === "cleared" ? "CLEAN!" : "BUMP — KEEP MOVING"
         : "";
     }
-    this.updateJunctionDecision(decision, runnerState.branchSelections, progress);
+    this.updateJunctionDecision(decision, runnerState.branchSelections, progress, !snapCamera);
 
     const baseFov = 52 + runningBlend * 6;
     const targetFov = (decision ? 68 : junctionAnticipation > 0 ? baseFov + junctionAnticipation * 8 : shortcutActive ? 66 : clampActive ? 61 : elapsedMs >= phaseAt(this.timeline, "penthouse-reveal") ? 54 : baseFov)
@@ -548,6 +695,7 @@ export class NightDropRunnerWorld {
     decision: ComposedSpatialRouteBranch | null,
     selections: Readonly<Record<string, string>>,
     progress: number,
+    announce: boolean,
   ): void {
     const selectedId = decision ? selections[decision.id] ?? decision.defaultAlternativeId : "";
     this.stage.dataset.decisionOpen = String(Boolean(decision));
@@ -558,9 +706,11 @@ export class NightDropRunnerWorld {
       ? String(Math.max(0, Math.round((decision.entryProgress - progress) * this.route.totalLength)))
       : "";
 
+    const previousDecisionId = this.decisionUiKey.split(":", 1)[0];
     const nextKey = `${decision?.id ?? "none"}:${selectedId}`;
     if (this.decisionUiKey === nextKey) return;
     this.decisionUiKey = nextKey;
+    if (announce && decision && previousDecisionId !== decision.id) this.onPresentationCue?.("junction-open");
     if (this.junctionPrompt) {
       this.junctionPrompt.textContent = decision?.junctionKind === "crossroads"
         ? "CROSSROADS · CHOOSE"
@@ -664,9 +814,9 @@ function createRibbon(path: THREE.CatmullRomCurve3, halfWidth: number, y: number
   return new THREE.Mesh(geometry, material);
 }
 
-function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): THREE.Group {
+function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute, lod: NightDropRunnerLod): THREE.Group {
   const city = new THREE.Group();
-  const buildingCount = Math.min(56, Math.max(28, Math.round(route.totalLength / 22)));
+  const buildingCount = Math.min(64, Math.max(30, Math.round(route.totalLength / 19)));
   for (let index = 0; index < buildingCount; index += 1) {
     const progress = .025 + (index / Math.max(1, buildingCount - 1)) * .95;
     const insideJunctionClearance = route.branches.some((junction) => Math.abs(progress - junction.entryProgress) * route.totalLength < 24);
@@ -679,7 +829,8 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): 
       const width = 4.5 + seeded(index * 11 + sideIndex) * 3;
       const depth = 4 + seeded(index * 19 + sideIndex) * 3.2;
       const height = 8 + seeded(index * 29 + sideIndex) * 15;
-      const accent = accentFor(progress);
+      const district = resolveNightDropDistrict(progress, route.segments.find(({ id }) => id === segmentId)?.kind);
+      const accent = district.primaryAccent;
       const label = (index + sideIndex) % 4 === 0
         ? CITY_LABELS[(index + sideIndex) % CITY_LABELS.length]
         : undefined;
@@ -690,9 +841,10 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): 
         depth,
         height,
         accent,
+        district: district.id,
         ...(label ? { label } : {}),
       });
-      building.position.copy(point).addScaledVector(sideVector, side * (14.5 + depth / 2));
+      building.position.copy(point).addScaledVector(sideVector, side * (10.4 + depth / 2));
       building.position.y = point.y;
       building.lookAt(point.clone().setY(point.y));
       building.userData.segmentId = segmentId;
@@ -715,6 +867,7 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): 
     city.add(architecture);
   });
   route.segments.forEach((roadPiece, index) => {
+    city.add(createNightDropStreetModule(path, route, roadPiece, index, lod));
     const furniture = createRoadPieceFurniture(path, route, roadPiece, index);
     if (furniture.children.length === 0) return;
     furniture.userData.segmentId = roadPiece.id;

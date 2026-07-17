@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { NightDropDistrictId } from "./night-drop-districts.js";
 
 export type NightDropBuildingArchetype = "glasshouse" | "night-market" | "service-block" | "stacked-flats";
 export type NightDropRoofTreatment = "crown" | "hvac" | "water-tank" | "antenna";
@@ -18,6 +19,7 @@ export interface NightDropBuildingSpec {
   readonly depth: number;
   readonly height: number;
   readonly accent: number;
+  readonly district?: NightDropDistrictId;
   readonly label?: string;
 }
 
@@ -28,12 +30,20 @@ const materialCache = new Map<string, THREE.MeshStandardMaterial>();
 const facadeCache = new Map<string, THREE.MeshBasicMaterial>();
 const signCache = new Map<string, THREE.MeshBasicMaterial>();
 
-export function describeNightDropBuilding(index: number, sideIndex: number): NightDropBuildingDescriptor {
+export function describeNightDropBuilding(index: number, sideIndex: number, district?: NightDropDistrictId): NightDropBuildingDescriptor {
   const archetypes: readonly NightDropBuildingArchetype[] = ["glasshouse", "night-market", "service-block", "stacked-flats"];
   const roofs: readonly NightDropRoofTreatment[] = ["crown", "hvac", "water-tank", "antenna"];
   const variation = Math.abs(index * 7 + sideIndex * 2);
+  const districtArchetypes: Readonly<Record<NightDropDistrictId, readonly NightDropBuildingArchetype[]>> = {
+    glasshouse: ["glasshouse", "stacked-flats", "glasshouse"],
+    "night-market": ["night-market", "stacked-flats", "night-market"],
+    "service-quarter": ["service-block", "night-market", "service-block"],
+    "canal-works": ["service-block", "glasshouse", "service-block"],
+    "upper-heights": ["glasshouse", "stacked-flats", "glasshouse"],
+  };
+  const availableArchetypes = district ? districtArchetypes[district] : archetypes;
   return {
-    archetype: archetypes[variation % archetypes.length]!,
+    archetype: availableArchetypes[variation % availableArchetypes.length]!,
     roofTreatment: roofs[(variation + Math.floor(index / 2)) % roofs.length]!,
     hasAwning: variation % 3 === 0,
     hasSideLight: variation % 4 !== 1,
@@ -42,10 +52,11 @@ export function describeNightDropBuilding(index: number, sideIndex: number): Nig
 }
 
 export function createNightDropBuilding(spec: NightDropBuildingSpec): THREE.Group {
-  const descriptor = describeNightDropBuilding(spec.index, spec.sideIndex);
+  const descriptor = describeNightDropBuilding(spec.index, spec.sideIndex, spec.district);
   const root = new THREE.Group();
   root.name = `night-drop-building-${spec.index}-${spec.sideIndex}`;
   root.userData.archetype = descriptor.archetype;
+  root.userData.district = spec.district ?? "unassigned";
   root.userData.productionKit = "night-drop-city-v1";
 
   const palette = paletteFor(descriptor.archetype);

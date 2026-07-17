@@ -63,6 +63,9 @@ This is route/presentation variety only and never changes an outcome.
 - Cross-City first obstacle: `?runnerSpike=1&route=cross-city&obstacle=0`
 - Cross-City fourth obstacle: `?runnerSpike=1&route=cross-city&obstacle=3`
 - Frozen board baseline: `?visualReset=1`
+- Production-asset integration mode: append `&assets=production` after the
+  first approved GLB pack is installed. Normal previews deliberately avoid
+  missing-file requests and use the procedural fallback.
 
 Stable approval frames can be selected with `runnerState`, for example:
 
@@ -77,6 +80,8 @@ Stable approval frames can be selected with `runnerState`, for example:
 - The 5×5 board remains available only as the internal visual-reset/debug view.
 
 The PNG stills and MP4 in this folder are the approval artefacts for this spike.
+The production GLB, animation, material, LOD and audio contract is documented in
+`docs/architecture/NIGHT_DROP_RUNNER_PRODUCTION_ASSETS.md`.
 
 ## Route lab controls
 

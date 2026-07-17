@@ -14,6 +14,10 @@ import {
   type NightDropRunnerRouteId,
 } from "./runner-routes.js";
 import { NightDropRunnerWorld } from "./runner-world.js";
+import {
+  NightDropRunnerFeedbackController,
+  type NightDropRunnerFeedbackCue,
+} from "./night-drop-runner-feedback.js";
 import "./runner-spike.css";
 
 const root = requiredElement<HTMLElement>("#app", document, "Night Drop runner spike requires #app");
@@ -21,6 +25,8 @@ const { theme } = createNightDropThemeRuntime();
 applyNightDropTheme(document.documentElement, theme);
 
 const query = new URLSearchParams(window.location.search);
+const productionAssetsEnabled = query.get("assets") === "production";
+const feedback = new NightDropRunnerFeedbackController();
 const requestedRoute = query.get("route");
 let plan = createNightDropRunnerPlan(isNightDropRunnerRouteId(requestedRoute) ? requestedRoute : DEFAULT_NIGHT_DROP_RUNNER_ROUTE);
 const timers: number[] = [];
@@ -39,7 +45,7 @@ const worldCanvas = requiredElement<HTMLCanvasElement>(".nr-runner-world", root,
 const routeSelect = requiredElement<HTMLSelectElement>(".nr-route-select", root, "Night Drop route selector failed to mount");
 const speedSelect = requiredElement<HTMLSelectElement>(".nr-speed-select", root, "Night Drop speed selector failed to mount");
 const runnerViewport = requiredElement<HTMLElement>(".nr-viewport", root, "Night Drop runner viewport failed to mount");
-let runnerWorld = new NightDropRunnerWorld(worldCanvas, stage, plan);
+let runnerWorld = createRunnerWorld();
 
 playButton.addEventListener("click", startRound);
 routeSelect.addEventListener("change", () => {
@@ -57,6 +63,7 @@ runnerViewport.addEventListener("pointercancel", clearRunnerPointer);
 window.addEventListener("beforeunload", () => {
   clearTimers();
   runnerWorld.dispose();
+  feedback.dispose();
 });
 
 const requestedState = query.get("runnerState");
@@ -87,6 +94,7 @@ Object.assign(window, {
     snapshot: () => runnerWorld.createSnapshot(),
     interrupt: interruptRound,
     recover: recoverRound,
+    feedback: () => feedback.inspect(),
     show: (phase: RunnerPhase) => {
       const beat = plan.timeline.find((item) => item.phase === phase);
       if (beat) applyBeat(beat, true);
@@ -178,6 +186,7 @@ function startRound(): void {
   routeSelect.disabled = true;
   speedSelect.disabled = true;
   setText("[data-balance]", "€99.00");
+  void feedback.unlock().then(() => feedback.cue("round-start"));
   runnerWorld.start(currentSpeed());
   scheduleTimeline(0);
 }
@@ -222,6 +231,8 @@ function applyBeat(beat: RunnerTimelineBeat, frozen: boolean): void {
   liveStatus.textContent = statusFor(beat.phase);
   if (frozen) runnerWorld.showAt(beat);
   updateRoundValues(beat.phase);
+  const feedbackCue = feedbackCueForPhase(beat.phase);
+  if (!frozen && feedbackCue) feedback.cue(feedbackCue);
 
   if (beat.phase === "resolved") {
     playing = false;
@@ -243,7 +254,7 @@ function selectRoute(routeId: NightDropRunnerRouteId): void {
   clearTimers();
   runnerWorld.dispose();
   plan = createNightDropRunnerPlan(routeId);
-  runnerWorld = new NightDropRunnerWorld(worldCanvas, stage, plan);
+  runnerWorld = createRunnerWorld();
   savedSnapshot = null;
   routeSelect.value = routeId;
   const nextUrl = new URL(window.location.href);
@@ -273,6 +284,7 @@ function executeInput(type: SpatialRunnerCommandType, source = "automation"): vo
   stage.dataset.commandsExecuted = String(runnerState.commandsExecuted);
   stage.dataset.lane = String(runnerState.lane);
   stage.dataset.runnerAction = runnerState.action;
+  if (record.accepted) feedback.cue(type === "jump" ? "jump" : type === "slide" ? "slide" : "dodge");
 }
 
 function chooseBranch(alternativeId: string): void {
@@ -287,6 +299,7 @@ function chooseBranch(alternativeId: string): void {
   stage.dataset.branchChoice = alternativeId;
   stage.dataset.lastInputAccepted = String(record.accepted);
   stage.dataset.commandsExecuted = String(runnerState.commandsExecuted);
+  if (record.accepted) feedback.cue("branch-selected");
 }
 
 function handleRunnerPointerDown(event: PointerEvent): void {
@@ -412,6 +425,14 @@ function recoverRound(): void {
   scheduleTimeline(fromMs);
   liveStatus.textContent = `Recovered at ${Math.round(savedSnapshot.state.progress * 100)}%`;
   stage.dataset.recoveryCount = String(runnerWorld.inspect().runnerState.recoveryCount);
+  feedback.cue("recovery");
+}
+
+function createRunnerWorld(): NightDropRunnerWorld {
+  return new NightDropRunnerWorld(worldCanvas, stage, plan, {
+    productionAssets: productionAssetsEnabled,
+    onPresentationCue: (cue) => feedback.cue(cue),
+  });
 }
 
 function handleKeyboardInput(event: KeyboardEvent): void {
@@ -507,6 +528,17 @@ function statusFor(phase: RunnerPhase): string {
   return statuses[phase];
 }
 
+function feedbackCueForPhase(phase: RunnerPhase): NightDropRunnerFeedbackCue | null {
+  if (phase === "package-one" || phase === "package-two") return "package";
+  if (phase === "premium-package") return "premium-package";
+  if (phase === "continuation-open") return "continuation";
+  if (phase === "shortcut") return "shortcut";
+  if (phase === "clamp") return "clamp";
+  if (phase === "arrival") return "arrival";
+  if (phase === "win") return "win";
+  return null;
+}
+
 function clearTimers(): void {
   timers.splice(0).forEach((timer) => window.clearTimeout(timer));
 }
@@ -542,6 +574,7 @@ declare global {
       readonly snapshot: () => SpatialRunnerSnapshot;
       readonly interrupt: () => void;
       readonly recover: () => void;
+      readonly feedback: () => ReturnType<NightDropRunnerFeedbackController["inspect"]>;
       readonly show: (phase: RunnerPhase) => void;
     };
   }

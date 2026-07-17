@@ -10,6 +10,16 @@ import {
   composeNightDropRunnerRoute,
 } from "../src/runner-spike/runner-routes.js";
 import { describeNightDropBuilding } from "../src/runner-spike/night-drop-building-kit.js";
+import { resolveNightDropDistrict } from "../src/runner-spike/night-drop-districts.js";
+import { NIGHT_DROP_RUNNER_FEEDBACK } from "../src/runner-spike/night-drop-runner-feedback.js";
+import {
+  NIGHT_DROP_DASH_ANIMATION_ROLES,
+  NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
+  resolveNightDropEnvironmentRole,
+  selectNightDropRunnerLod,
+  validateNightDropRunnerProductionManifest,
+  type NightDropRunnerProductionManifest,
+} from "../src/runner-spike/night-drop-runner-assets.js";
 
 describe("Night Drop cinematic runner routes", () => {
   it("projects a real deterministic RouteRun preview into a spatial presentation route", () => {
@@ -268,5 +278,53 @@ describe("Night Drop 3D building kit", () => {
     ]));
     expect(new Set(firstPass.map(({ roofTreatment }) => roofTreatment)).size).toBeGreaterThanOrEqual(3);
     expect(firstPass.some(({ hasAwning }) => hasAwning)).toBe(true);
+  });
+
+  it("moves through five readable districts and lets route semantics override distance", () => {
+    expect([.05, .3, .55, .72, .92].map((progress) => resolveNightDropDistrict(progress).id)).toEqual([
+      "glasshouse", "night-market", "service-quarter", "canal-works", "upper-heights",
+    ]);
+    expect(resolveNightDropDistrict(.1, "alley").id).toBe("service-quarter");
+    expect(resolveNightDropDistrict(.1, "bridge").id).toBe("canal-works");
+    expect(resolveNightDropDistrict(.1, "rooftop").id).toBe("upper-heights");
+    expect(describeNightDropBuilding(0, 0, "night-market").archetype).toBe("night-market");
+  });
+});
+
+describe("Night Drop runner production asset contract", () => {
+  it("validates the complete character, animation, LOD and environment manifest", () => {
+    expect(() => validateNightDropRunnerProductionManifest(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST)).not.toThrow();
+    expect(Object.keys(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.character.animations)).toEqual(NIGHT_DROP_DASH_ANIMATION_ROLES);
+    expect(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.environment).toHaveLength(12);
+    expect(new Set(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.environment.map(({ role }) => role)).size).toBe(12);
+    const routes = NIGHT_DROP_RUNNER_ROUTES.map(({ id }) => composeNightDropRunnerRoute(id));
+    const requiredRoles = new Set(routes.flatMap((route) => route.segments.map((segment) => resolveNightDropEnvironmentRole(route, segment))));
+    const suppliedRoles = new Set(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.environment.map(({ role }) => role));
+    expect([...requiredRoles].every((role) => suppliedRoles.has(role))).toBe(true);
+  });
+
+  it("selects conservative mobile LODs and reserves high detail for capable desktop profiles", () => {
+    expect(selectNightDropRunnerLod({ viewportWidth: 390, pixelRatio: 3, deviceMemoryGb: 8, compact: true })).toBe("low");
+    expect(selectNightDropRunnerLod({ viewportWidth: 900, pixelRatio: 2, deviceMemoryGb: 6, compact: false })).toBe("medium");
+    expect(selectNightDropRunnerLod({ viewportWidth: 1_440, pixelRatio: 2, deviceMemoryGb: 8, compact: false })).toBe("high");
+  });
+
+  it("rejects duplicate environment roles before any production asset is fetched", () => {
+    const duplicate = {
+      ...NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
+      environment: [
+        ...NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.environment,
+        NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.environment[0]!,
+      ],
+    } satisfies NightDropRunnerProductionManifest;
+    expect(() => validateNightDropRunnerProductionManifest(duplicate)).toThrow(/Duplicate/);
+  });
+
+  it("provides unique logical production audio hooks for every placeholder cue", () => {
+    const specs = Object.values(NIGHT_DROP_RUNNER_FEEDBACK);
+    expect(specs).toHaveLength(16);
+    expect(new Set(specs.map(({ logicalId }) => logicalId)).size).toBe(specs.length);
+    expect(specs.every(({ productionUrl }) => productionUrl.startsWith("/assets/night-drop/runner/audio/"))).toBe(true);
+    expect(specs.every(({ hapticPattern }) => hapticPattern.every((duration) => duration > 0))).toBe(true);
   });
 });
