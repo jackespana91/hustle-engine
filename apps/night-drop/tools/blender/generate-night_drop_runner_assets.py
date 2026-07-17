@@ -360,20 +360,69 @@ def add_cross_street(detail: int, mats: dict[str, bpy.types.Material], width: fl
         add_box("Crosswalk", (x, y - 3.7, 0.04), (0.62, 1.8, 0.04), mats["concrete_light"], bevel=0.01)
 
 
-def add_standard_city(detail: int, mats: dict[str, bpy.types.Material], *, wide: bool = False, alley: bool = False) -> None:
+def add_standard_city(detail: int, mats: dict[str, bpy.types.Material], *, alley: bool = False) -> None:
+    """Frame a street without allowing the architecture to crowd the run line.
+
+    The previous production modules placed facade edges almost directly against
+    the pavement. That worked in an orthographic asset review, but foreground
+    buildings repeatedly masked the road from the chase camera. Keep a generous
+    pedestrian/visibility zone outside the pavement and add gaps between shells
+    so the route remains the dominant shape on a phone.
+    """
     count = 2 if detail == 0 else 3 if detail == 1 else 4
-    road_half = 5.1 if alley else 8.0
+    road_half = 5.6 if alley else 8.0
+    pavement_width = 2.5
+    sightline_setback = 1.8 if alley else 4.5
+    facade_edge = road_half + pavement_width + sightline_setback
     for side_index, side in enumerate((-1, 1)):
         for index in range(count):
-            length = 20 / count - 0.35
-            y = -10 + length / 2 + index * (20 / count)
-            width = 4.2 if alley else 5.3 + ((index + side_index) % 2) * 0.75
-            height = 5.8 + ((index * 3 + side_index * 2) % 5) * 1.45
-            x = side * (road_half + width / 2 + (0.45 if alley else 1.9))
+            slot_length = 20 / count
+            length = slot_length - (0.9 if alley else 1.45)
+            y = -10 + slot_length / 2 + index * slot_length
+            width = 3.8 if alley else 4.45 + ((index + side_index) % 2) * 0.55
+            height = 5.0 + ((index * 3 + side_index * 2) % 5) * 1.15
+            x = side * (facade_edge + width / 2)
             add_building(index + side_index * 10, x, y, width, length, height, side, detail, mats, premium=index == count - 1 and side > 0)
-    if wide and detail > 0:
-        for x in (-14.0, 14.0):
-            add_cylinder("JunctionBeacon", (x, -5.2, 1.3), 0.12, 2.6, mats["cyan_muted"], vertices=10)
+
+
+def add_intersection_city(role: str, detail: int, mats: dict[str, bpy.types.Material]) -> None:
+    """Place buildings beyond every driveable arm of an intersection.
+
+    Junctions cannot reuse straight-street architecture: long shells on the
+    module sides physically intersect the turn branches and hide the player's
+    choice. Compact corner volumes keep the city present while leaving a clear
+    visual cone through the crossroads, T-junction and bend exits.
+    """
+    if role == "crossroads":
+        x_edge, y_centres = 22.0, (-8.4, 8.4)
+    elif role == "t-junction":
+        x_edge, y_centres = 19.0, (-6.0, 10.2)
+    else:
+        x_edge, y_centres = 14.8, (-7.2, 8.6)
+
+    for side_index, side in enumerate((-1, 1)):
+        for row, y in enumerate(y_centres):
+            width = 4.0 + ((side_index + row) % 2) * 0.55
+            length = 4.6 if role in ("crossroads", "t-junction") else 4.0
+            height = 5.2 + ((side_index * 2 + row) % 3) * 1.15
+            x = side * (x_edge + width / 2)
+            add_building(
+                40 + side_index * 10 + row,
+                x,
+                y,
+                width,
+                length,
+                height,
+                side,
+                detail,
+                mats,
+                premium=side > 0 and row == 1,
+            )
+
+    if detail > 0:
+        beacon_x = x_edge - 1.0
+        for x in (-beacon_x, beacon_x):
+            add_cylinder("JunctionBeacon", (x, -4.8, 1.3), 0.12, 2.6, mats["cyan_muted"], vertices=10)
 
 
 def add_bridge(detail: int, mats: dict[str, bpy.types.Material]) -> None:
@@ -452,7 +501,10 @@ def build_environment(role: str, lod: str) -> None:
             add_box("RampApproach", (0, 2.0, 0.48), (13.6, 10.0, 0.28), mats["metal"], bevel=0.08, rotation=(math.radians(5.5), 0, 0))
         elif role == "ramp-down":
             add_box("RampApproach", (0, 2.0, 0.48), (13.6, 10.0, 0.28), mats["metal"], bevel=0.08, rotation=(math.radians(-5.5), 0, 0))
-        add_standard_city(detail, mats, wide=role in ("crossroads", "t-junction"), alley=role == "alley")
+        if role in ("crossroads", "t-junction", "corner-left", "corner-right"):
+            add_intersection_city(role, detail, mats)
+        else:
+            add_standard_city(detail, mats, alley=role == "alley")
 
     merge_environment_meshes(root)
     output = ENVIRONMENT_ROOT / f"{role.replace('-', '_')}_{lod}.glb"

@@ -89,10 +89,10 @@ export const NIGHT_DROP_DASH_ANIMATION_ROLES: readonly NightDropDashAnimationRol
 
 export const NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST: NightDropRunnerProductionManifest = {
   id: "night-drop.runner-production",
-  version: "1.3.0",
+  version: "1.4.0",
   character: {
     id: "character.dash",
-    modelUrl: "/assets/night-drop/runner/characters/dash/dash.glb?v=blender-v4",
+    modelUrl: "/assets/night-drop/runner/characters/dash/dash.glb?v=blender-v5",
     scale: 1,
     groundOffset: 0,
     forwardAxis: "+z",
@@ -292,9 +292,9 @@ function environment(id: string, role: NightDropEnvironmentRole): NightDropEnvir
     id,
     role,
     lodUrls: {
-      low: `/assets/night-drop/runner/environment/${slug}_lod2.glb?v=blender-v4`,
-      medium: `/assets/night-drop/runner/environment/${slug}_lod1.glb?v=blender-v4`,
-      high: `/assets/night-drop/runner/environment/${slug}_lod0.glb?v=blender-v4`,
+      low: `/assets/night-drop/runner/environment/${slug}_lod2.glb?v=blender-v5`,
+      medium: `/assets/night-drop/runner/environment/${slug}_lod1.glb?v=blender-v5`,
+      high: `/assets/night-drop/runner/environment/${slug}_lod0.glb?v=blender-v5`,
     },
     footprint: { width: role === "crossroads" ? 38 : role === "t-junction" ? 32 : 16, length: 20 },
     forwardAxis: "+z",

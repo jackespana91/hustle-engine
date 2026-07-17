@@ -6,15 +6,15 @@
       "role": "street-straight",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/street_straight_lod0.glb",
-      "bytes": 1076220,
+      "bytes": 1060996,
       "meshObjects": 10,
-      "triangles": 15344
+      "triangles": 15128
     },
     {
       "role": "street-straight",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/street_straight_lod1.glb",
-      "bytes": 742696,
+      "bytes": 742620,
       "meshObjects": 10,
       "triangles": 10536
     },
@@ -22,7 +22,7 @@
       "role": "street-straight",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/street_straight_lod2.glb",
-      "bytes": 401160,
+      "bytes": 401048,
       "meshObjects": 9,
       "triangles": 5616
     },
@@ -30,23 +30,23 @@
       "role": "corner-left",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/corner_left_lod0.glb",
-      "bytes": 1136688,
+      "bytes": 655416,
       "meshObjects": 10,
-      "triangles": 16208
+      "triangles": 9256
     },
     {
       "role": "corner-left",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/corner_left_lod1.glb",
-      "bytes": 803168,
+      "bytes": 594908,
       "meshObjects": 10,
-      "triangles": 11400
+      "triangles": 8392
     },
     {
       "role": "corner-left",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/corner_left_lod2.glb",
-      "bytes": 438952,
+      "bytes": 438944,
       "meshObjects": 9,
       "triangles": 6156
     },
@@ -54,23 +54,23 @@
       "role": "corner-right",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/corner_right_lod0.glb",
-      "bytes": 1136692,
+      "bytes": 655420,
       "meshObjects": 10,
-      "triangles": 16208
+      "triangles": 9256
     },
     {
       "role": "corner-right",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/corner_right_lod1.glb",
-      "bytes": 803168,
+      "bytes": 594908,
       "meshObjects": 10,
-      "triangles": 11400
+      "triangles": 8392
     },
     {
       "role": "corner-right",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/corner_right_lod2.glb",
-      "bytes": 438956,
+      "bytes": 438948,
       "meshObjects": 9,
       "triangles": 6156
     },
@@ -78,23 +78,23 @@
       "role": "t-junction",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/t_junction_lod0.glb",
-      "bytes": 1139528,
+      "bytes": 651824,
       "meshObjects": 10,
-      "triangles": 16280
+      "triangles": 9256
     },
     {
       "role": "t-junction",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/t_junction_lod1.glb",
-      "bytes": 806008,
+      "bytes": 591296,
       "meshObjects": 10,
-      "triangles": 11472
+      "triangles": 8392
     },
     {
       "role": "t-junction",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/t_junction_lod2.glb",
-      "bytes": 437520,
+      "bytes": 437428,
       "meshObjects": 9,
       "triangles": 6156
     },
@@ -102,23 +102,23 @@
       "role": "crossroads",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/crossroads_lod0.glb",
-      "bytes": 1139528,
+      "bytes": 653972,
       "meshObjects": 10,
-      "triangles": 16280
+      "triangles": 9256
     },
     {
       "role": "crossroads",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/crossroads_lod1.glb",
-      "bytes": 806008,
+      "bytes": 593460,
       "meshObjects": 10,
-      "triangles": 11472
+      "triangles": 8392
     },
     {
       "role": "crossroads",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/crossroads_lod2.glb",
-      "bytes": 437520,
+      "bytes": 437504,
       "meshObjects": 9,
       "triangles": 6156
     },
@@ -126,15 +126,15 @@
       "role": "alley",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/alley_lod0.glb",
-      "bytes": 1076228,
+      "bytes": 1061008,
       "meshObjects": 10,
-      "triangles": 15344
+      "triangles": 15128
     },
     {
       "role": "alley",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/alley_lod1.glb",
-      "bytes": 742704,
+      "bytes": 742664,
       "meshObjects": 10,
       "triangles": 10536
     },
@@ -142,7 +142,7 @@
       "role": "alley",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/alley_lod2.glb",
-      "bytes": 401176,
+      "bytes": 401084,
       "meshObjects": 9,
       "triangles": 5616
     },
@@ -198,15 +198,15 @@
       "role": "ramp-up",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/ramp_up_lod0.glb",
-      "bytes": 1083760,
+      "bytes": 1068536,
       "meshObjects": 10,
-      "triangles": 15452
+      "triangles": 15236
     },
     {
       "role": "ramp-up",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/ramp_up_lod1.glb",
-      "bytes": 750236,
+      "bytes": 750160,
       "meshObjects": 10,
       "triangles": 10644
     },
@@ -214,7 +214,7 @@
       "role": "ramp-up",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/ramp_up_lod2.glb",
-      "bytes": 409144,
+      "bytes": 409032,
       "meshObjects": 10,
       "triangles": 5724
     },
@@ -222,15 +222,15 @@
       "role": "ramp-down",
       "lod": "lod0",
       "path": "assets/night-drop/runner/environment/ramp_down_lod0.glb",
-      "bytes": 1083768,
+      "bytes": 1068544,
       "meshObjects": 10,
-      "triangles": 15452
+      "triangles": 15236
     },
     {
       "role": "ramp-down",
       "lod": "lod1",
       "path": "assets/night-drop/runner/environment/ramp_down_lod1.glb",
-      "bytes": 750240,
+      "bytes": 750164,
       "meshObjects": 10,
       "triangles": 10644
     },
@@ -238,7 +238,7 @@
       "role": "ramp-down",
       "lod": "lod2",
       "path": "assets/night-drop/runner/environment/ramp_down_lod2.glb",
-      "bytes": 409148,
+      "bytes": 409040,
       "meshObjects": 10,
       "triangles": 5724
     },

@@ -109,6 +109,23 @@ Canal Works and Upper Heights. District identity should come from modular
 facades, signs, props, materials and lighting; do not add a painted background.
 The physical streamed city is the environment.
 
+### Chase-camera sightline rules
+
+- Treat the route as the primary silhouette. Standard facades begin beyond the
+  full pavement plus a 4.5m visibility setback; the alley uses a smaller 1.8m
+  setback to preserve its deliberate compression.
+- Leave visible gaps between neighbouring building shells. A continuous wall
+  beside the camera is not an acceptable substitute for city density.
+- Crossroads, T-junctions and corners use dedicated compact corner buildings.
+  Never reuse the long straight-street facade strips across a driveable branch.
+- Keep every junction exit open from the chase camera before the decision UI
+  appears. Buildings may frame a choice, but may not mask its road surface,
+  lane marker or directional sign.
+- Reduce near-route mass before changing the camera. Camera movement must not
+  be used to hide invalid physical placement.
+
+Production manifest `1.4.0` is the first pack generated against these rules.
+
 ## Materials and textures
 
 The first shared material set is:
