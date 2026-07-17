@@ -136,6 +136,24 @@ Production manifest `1.4.0` is the first pack generated against these rules,
 but the runtime still requires independently placeable environment pieces
 before those Blender buildings can replace curve-sampled placement safely.
 
+### Curve-safe night city kit
+
+The player-facing city kit treats the route as protected geometry:
+
+- the continuous road occupies the central 4.8m half-width;
+- the pavement and route edge remain clear through 6.4m;
+- building origins are sampled directly from the route tangent and normal;
+- facade faces begin at least 11.6m from the centreline;
+- local pavement frontage approaches the route but stops outside the road edge;
+- junction buildings use explicit corner placements and never inherit a long
+  straight module transform.
+
+Night lighting follows a restrained hierarchy. Building mass is dark navy,
+charcoal or deep plum; warm and cool windows provide occupancy; entrances,
+shops, signs and street lamps add local pools of light; district neon is an
+accent rather than a whole-building wash. No painted background is used. The
+visible city remains physical, route-aware geometry.
+
 ## Materials and textures
 
 The first shared material set is:

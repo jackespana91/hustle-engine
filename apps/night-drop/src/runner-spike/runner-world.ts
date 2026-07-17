@@ -133,11 +133,11 @@ export class NightDropRunnerWorld {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.62;
+    this.renderer.toneMappingExposure = 1.48;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.scene.background = new THREE.Color(0x07101f);
-    this.scene.fog = new THREE.FogExp2(0x07101b, .012);
+    this.scene.background = new THREE.Color(0x030914);
+    this.scene.fog = new THREE.FogExp2(0x050d18, .0095);
     this.stage.dataset.renderer = "three";
     this.stage.dataset.routeId = plan.routeId;
     this.stage.dataset.routeLength = String(Math.round(this.route.totalLength));
@@ -392,17 +392,17 @@ export class NightDropRunnerWorld {
   }
 
   private buildScene(): void {
-    this.scene.add(new THREE.HemisphereLight(0xa7efff, 0x101526, 2.35));
-    const key = new THREE.DirectionalLight(0xc4f5ff, 3.4);
+    this.scene.add(new THREE.HemisphereLight(0x7bb7d2, 0x070914, 1.72));
+    const key = new THREE.DirectionalLight(0x9fd9ee, 2.65);
     key.position.set(-12, 26, 8);
     key.castShadow = true;
     key.shadow.mapSize.set(512, 512);
     this.scene.add(key);
 
-    const magentaFill = new THREE.PointLight(0xff2aaf, 18, 34, 2);
+    const magentaFill = new THREE.PointLight(0xff2aaf, 9, 30, 2);
     magentaFill.position.set(14, 8, -48);
     this.scene.add(magentaFill);
-    const cyanFill = new THREE.PointLight(0x28eaff, 16, 32, 2);
+    const cyanFill = new THREE.PointLight(0x28eaff, 8, 29, 2);
     cyanFill.position.set(-8, 5, -92);
     this.scene.add(cyanFill);
 
@@ -830,7 +830,7 @@ function createRibbon(path: THREE.CatmullRomCurve3, halfWidth: number, y: number
 
 function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute, lod: NightDropRunnerLod): THREE.Group {
   const city = new THREE.Group();
-  const buildingCount = Math.min(64, Math.max(30, Math.round(route.totalLength / 19)));
+  const buildingCount = Math.min(52, Math.max(28, Math.round(route.totalLength / 22)));
   for (let index = 0; index < buildingCount; index += 1) {
     const progress = .025 + (index / Math.max(1, buildingCount - 1)) * .95;
     const insideJunctionClearance = route.branches.some((junction) => Math.abs(progress - junction.entryProgress) * route.totalLength < 24);
@@ -842,7 +842,7 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute, l
     ([-1, 1] as const).forEach((side, sideIndex) => {
       const width = 4.5 + seeded(index * 11 + sideIndex) * 3;
       const depth = 4 + seeded(index * 19 + sideIndex) * 3.2;
-      const height = 8 + seeded(index * 29 + sideIndex) * 15;
+      const height = 7.5 + seeded(index * 29 + sideIndex) * 11.5;
       const district = resolveNightDropDistrict(progress, route.segments.find(({ id }) => id === segmentId)?.kind);
       const accent = district.primaryAccent;
       const label = (index + sideIndex) % 4 === 0
@@ -858,7 +858,7 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute, l
         district: district.id,
         ...(label ? { label } : {}),
       });
-      building.position.copy(point).addScaledVector(sideVector, side * (10.4 + depth / 2));
+      building.position.copy(point).addScaledVector(sideVector, side * (11.6 + depth / 2));
       building.position.y = point.y;
       building.lookAt(point.clone().setY(point.y));
       building.userData.segmentId = segmentId;
@@ -1039,17 +1039,25 @@ function createJunctionBuilding(
   const shell = new THREE.Mesh(
     new THREE.BoxGeometry(width, height, depth),
     new THREE.MeshStandardMaterial({
-      color: blocked ? 0x25121c : 0x111f2c,
-      roughness: .52,
-      metalness: .34,
+      color: blocked ? 0x170b12 : 0x08131d,
+      roughness: .64,
+      metalness: .26,
       emissive: accent,
-      emissiveIntensity: blocked ? .13 : .075,
+      emissiveIntensity: blocked ? .038 : .012,
     }),
   );
   shell.position.y = height / 2;
   shell.castShadow = true;
   shell.receiveShadow = true;
   root.add(shell);
+
+  const pavement = new THREE.Mesh(
+    new THREE.BoxGeometry(width + .7, .14, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x1d2830, emissive: 0x07131a, emissiveIntensity: .015, roughness: .82, metalness: .12 }),
+  );
+  pavement.position.set(0, .07, depth / 2 + 1.1);
+  pavement.receiveShadow = true;
+  root.add(pavement);
 
   const facade = new THREE.Mesh(
     new THREE.PlaneGeometry(width * .72, height * .66),
@@ -1092,19 +1100,26 @@ function createWindowFacadeMaterial(accent: number): THREE.MeshBasicMaterial {
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Night Drop window facade canvas unavailable");
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = `#${accent.toString(16).padStart(6, "0")}`;
+  context.fillStyle = "rgba(3, 8, 15, .97)";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const accentColour = `#${accent.toString(16).padStart(6, "0")}`;
+  const windowColours = ["#9feaff", "#ffd58a", "#7ebcff"] as const;
   for (let row = 0; row < 9; row += 1) {
     for (let column = 0; column < 4; column += 1) {
       if ((row * 3 + column * 5) % 7 === 0) continue;
-      context.globalAlpha = .28 + ((row + column) % 3) * .18;
+      context.globalAlpha = .38 + ((row + column) % 3) * .18;
+      context.fillStyle = windowColours[(row + column) % windowColours.length]!;
       context.fillRect(5 + column * 15, 6 + row * 14, 8, 4);
     }
   }
+  context.globalAlpha = .14;
+  context.strokeStyle = accentColour;
+  context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
   context.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
-  return new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .82, depthWrite: false });
+  return new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: .94, depthWrite: false });
 }
 
 function createJunctionGeometry(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): THREE.Group {
@@ -1452,9 +1467,18 @@ function createStreetLamp(color: number): THREE.Group {
   const group = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(.035, .055, 3.7, 8), new THREE.MeshStandardMaterial({ color: 0x263540, roughness: .45, metalness: .8 }));
   pole.position.y = 1.85;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(.72, .055, .055), new THREE.MeshStandardMaterial({ color: 0x263540, roughness: .42, metalness: .82 }));
+  arm.position.set(.32, 3.65, 0);
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(.12, 10, 8), new THREE.MeshBasicMaterial({ color }));
-  bulb.position.set(0, 3.72, 0);
-  group.add(pole, bulb);
+  bulb.position.set(.68, 3.6, 0);
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 20),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .11, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.scale.set(1.25, .65, 1);
+  pool.position.set(.68, .08, 0);
+  group.add(pole, arm, bulb, pool);
   return group;
 }
 
