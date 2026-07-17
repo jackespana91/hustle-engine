@@ -14,6 +14,8 @@ import {
   type SpatialRunnerSnapshot,
 } from "@hustle/routerun";
 import type { NightDropRunnerPlan, RunnerTimelineBeat } from "./runner-plan.js";
+import { createNightDropBuilding } from "./night-drop-building-kit.js";
+import { createNightDropDashRig, type NightDropDashParts } from "./night-drop-dash-rig.js";
 
 interface WorldPackage {
   readonly root: THREE.Group;
@@ -35,8 +37,8 @@ export class NightDropRunnerWorld {
   private readonly route: ComposedSpatialRoute;
   private readonly path: THREE.CatmullRomCurve3;
   private readonly timeline: readonly RunnerTimelineBeat[];
-  private readonly runner = createDashRunner();
-  private readonly runnerParts: RunnerParts;
+  private readonly runner = createNightDropDashRig();
+  private readonly runnerParts: NightDropDashParts;
   private readonly runnerController: SpatialRunnerController;
   private readonly routeMarkers = new THREE.Group();
   private readonly junctions: THREE.Group;
@@ -102,7 +104,7 @@ export class NightDropRunnerWorld {
     this.stage.dataset.routeId = plan.routeId;
     this.stage.dataset.routeLength = String(Math.round(this.route.totalLength));
 
-    this.runnerParts = this.runner.userData.parts as RunnerParts;
+    this.runnerParts = this.runner.userData.parts as NightDropDashParts;
     this.packages = this.route.cues.filter(({ kind }) => kind === "standard-pickup" || kind === "premium-pickup").map((cue) => ({
       root: createPackage(cue.progress, cue.laneOffset, cue.kind === "premium-pickup", this.path),
       collectedAtMs: timeAtProgress(cue.progress, this.timeline),
@@ -384,6 +386,11 @@ export class NightDropRunnerWorld {
     const dodgeLean = runnerState.action === "dodging-left" ? -.22 : runnerState.action === "dodging-right" ? .22 : 0;
     this.runnerParts.torso.rotation.z = (moving ? stride * .025 : 0) + dodgeLean + hitStrength * Math.sin(elapsedMs * .07) * .12;
     this.runnerParts.backpack.rotation.z = moving ? -stride * .03 : 0;
+    this.runnerParts.head.rotation.y = moving ? Math.sin(elapsedMs * .0065) * .035 : -.06;
+    this.runnerParts.head.rotation.z = dodgeLean * .18 + hitStrength * Math.sin(elapsedMs * .08) * .05;
+    this.runnerParts.hair.rotation.x = moving ? -.05 - Math.abs(stride) * .045 : 0;
+    this.runnerParts.jacketTail.rotation.x = moving ? .16 + Math.abs(stride) * .16 + runningBlend * .08 : .04;
+    this.runnerParts.jacketTail.rotation.z = moving ? stride * .035 : 0;
     this.runner.scale.set(.82 + clearStrength * .035, runnerState.action === "sliding" ? .52 : .82 - hitStrength * .08, .82 + hitStrength * .05);
 
     const cameraDistance = (moving ? 8.85 - runningBlend * 1.2 : 8.85) + junctionAnticipation * 1.15 + obstacleAnticipation * .45;
@@ -595,15 +602,6 @@ export class NightDropRunnerWorld {
   }
 }
 
-interface RunnerParts {
-  readonly torso: THREE.Mesh;
-  readonly backpack: THREE.Mesh;
-  readonly leftLeg: THREE.Group;
-  readonly rightLeg: THREE.Group;
-  readonly leftArm: THREE.Group;
-  readonly rightArm: THREE.Group;
-}
-
 function createRoutePath(route: ComposedSpatialRoute): THREE.CatmullRomCurve3 {
   return new THREE.CatmullRomCurve3(
     route.samples.map(({ position }) => new THREE.Vector3(position.x, position.y, position.z)),
@@ -668,9 +666,7 @@ function createRibbon(path: THREE.CatmullRomCurve3, halfWidth: number, y: number
 
 function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): THREE.Group {
   const city = new THREE.Group();
-  const buildingCount = Math.min(84, Math.max(30, Math.round(route.totalLength / 15)));
-  const buildingMaterials = new Map<number, THREE.MeshStandardMaterial>();
-  const facadeMaterials = new Map<number, THREE.MeshBasicMaterial>();
+  const buildingCount = Math.min(56, Math.max(28, Math.round(route.totalLength / 22)));
   for (let index = 0; index < buildingCount; index += 1) {
     const progress = .025 + (index / Math.max(1, buildingCount - 1)) * .95;
     const insideJunctionClearance = route.branches.some((junction) => Math.abs(progress - junction.entryProgress) * route.totalLength < 24);
@@ -684,43 +680,23 @@ function createCity(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): 
       const depth = 4 + seeded(index * 19 + sideIndex) * 3.2;
       const height = 8 + seeded(index * 29 + sideIndex) * 15;
       const accent = accentFor(progress);
-      const buildingMaterial = buildingMaterials.get(accent) ?? new THREE.MeshStandardMaterial({
-        color: 0x111e2d,
-        roughness: .56,
-        metalness: .32,
-        emissive: accent,
-        emissiveIntensity: .095,
+      const label = (index + sideIndex) % 4 === 0
+        ? CITY_LABELS[(index + sideIndex) % CITY_LABELS.length]
+        : undefined;
+      const building = createNightDropBuilding({
+        index,
+        sideIndex,
+        width,
+        depth,
+        height,
+        accent,
+        ...(label ? { label } : {}),
       });
-      buildingMaterials.set(accent, buildingMaterial);
-      const building = new THREE.Mesh(
-        new THREE.BoxGeometry(width, height, depth),
-        buildingMaterial,
-      );
       building.position.copy(point).addScaledVector(sideVector, side * (14.5 + depth / 2));
-      building.position.y = point.y + height / 2;
-      building.lookAt(point.clone().add(tangent));
-      building.castShadow = true;
-      building.receiveShadow = true;
+      building.position.y = point.y;
+      building.lookAt(point.clone().setY(point.y));
       building.userData.segmentId = segmentId;
       city.add(building);
-
-      const facadeMaterial = facadeMaterials.get(accent) ?? createWindowFacadeMaterial(accent);
-      facadeMaterials.set(accent, facadeMaterial);
-      const facade = new THREE.Mesh(new THREE.PlaneGeometry(width * .64, height * .68), facadeMaterial);
-      facade.position.copy(building.position).addScaledVector(sideVector, -side * (depth / 2 + .02));
-      facade.position.y = point.y + height * .53;
-      facade.lookAt(point.clone().setY(facade.position.y));
-      facade.userData.segmentId = segmentId;
-      city.add(facade);
-
-      if ((index + sideIndex) % 4 === 0) {
-        const sign = createNeonSign(CITY_LABELS[(index + sideIndex) % CITY_LABELS.length]!, accent);
-        sign.position.copy(building.position).addScaledVector(sideVector, -side * (depth / 2 + .12));
-        sign.position.y = point.y + 2.2 + seeded(index) * 3.5;
-        sign.lookAt(point.clone().setY(sign.position.y));
-        sign.userData.segmentId = segmentId;
-        city.add(sign);
-      }
     });
 
     if (index % 3 === 0) {
@@ -1085,76 +1061,6 @@ function directionLabel(direction: "left" | "straight" | "right"): string {
   return "↑ Straight";
 }
 
-function createDashRunner(): THREE.Group {
-  const root = new THREE.Group();
-  const black = new THREE.MeshStandardMaterial({ color: 0x06090e, roughness: .58, metalness: .16 });
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x121c27, roughness: .7, metalness: .1 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x6f9127, roughness: .58, emissive: 0x304809, emissiveIntensity: .32 });
-  const cyan = new THREE.MeshStandardMaterial({ color: 0x1cc5d7, emissive: 0x1cc5d7, emissiveIntensity: 1.8 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0x9b674d, roughness: .8 });
-
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.36, .7, 6, 12), cloth);
-  torso.position.y = 1.42;
-  torso.castShadow = true;
-  root.add(torso);
-
-  const vest = new THREE.Mesh(new THREE.BoxGeometry(.68, .58, .12), green);
-  vest.position.set(0, 1.44, .31);
-  vest.castShadow = true;
-  root.add(vest);
-
-  const hood = new THREE.Mesh(new THREE.SphereGeometry(.37, 18, 14), black);
-  hood.position.y = 2.17;
-  hood.castShadow = true;
-  const face = new THREE.Mesh(new THREE.SphereGeometry(.27, 16, 12), skin);
-  face.scale.set(1, 1.08, .68);
-  face.position.set(0, 2.16, .23);
-  root.add(hood, face);
-
-  const backpack = new THREE.Mesh(new THREE.BoxGeometry(.52, .68, .2), black);
-  backpack.position.set(0, 1.48, -.38);
-  backpack.castShadow = true;
-  root.add(backpack);
-  const backpackPanel = new THREE.Mesh(new THREE.BoxGeometry(.35, .4, .035), green);
-  backpackPanel.position.set(0, 1.48, -.5);
-  const backpackLight = new THREE.Mesh(new THREE.BoxGeometry(.26, .05, .035), cyan);
-  backpackLight.position.set(0, 1.57, -.53);
-  root.add(backpackPanel, backpackLight);
-
-  const leftLeg = createLimb(.16, .72, black);
-  leftLeg.position.set(-.23, .92, 0);
-  const rightLeg = createLimb(.16, .72, black);
-  rightLeg.position.set(.23, .92, 0);
-  const leftArm = createLimb(.12, .62, cloth);
-  leftArm.position.set(-.54, 1.77, 0);
-  leftArm.rotation.z = -.14;
-  const rightArm = createLimb(.12, .62, cloth);
-  rightArm.position.set(.54, 1.77, 0);
-  rightArm.rotation.z = .14;
-  root.add(leftLeg, rightLeg, leftArm, rightArm);
-
-  const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(.68, 20),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .46, depthWrite: false }),
-  );
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = .025;
-  root.add(shadow);
-
-  root.userData.parts = { torso, backpack, leftLeg, rightLeg, leftArm, rightArm } satisfies RunnerParts;
-  root.scale.setScalar(.82);
-  return root;
-}
-
-function createLimb(radius: number, length: number, material: THREE.Material): THREE.Group {
-  const pivot = new THREE.Group();
-  const limb = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 5, 10), material);
-  limb.position.y = -length / 2;
-  limb.castShadow = true;
-  pivot.add(limb);
-  return pivot;
-}
-
 function createPackage(progress: number, lane: number, premium: boolean, path: THREE.CatmullRomCurve3): THREE.Group {
   const group = new THREE.Group();
   const gold = new THREE.MeshStandardMaterial({ color: premium ? 0xfff16a : 0xffd21c, roughness: .24, metalness: .55, emissive: 0xffb900, emissiveIntensity: premium ? 1.5 : .72 });
@@ -1327,13 +1233,22 @@ function createClampModel(): THREE.Group {
   shirtPanel.position.set(0, 1.5, .58);
   const head = new THREE.Mesh(new THREE.SphereGeometry(.34, 16, 12), skin);
   head.position.y = 2.65;
-  const legLeft = createLimb(.18, .72, coat);
+  const legLeft = createCharacterLimb(.18, .72, coat);
   legLeft.position.set(-.3, .75, 0);
-  const legRight = createLimb(.18, .72, coat);
+  const legRight = createCharacterLimb(.18, .72, coat);
   legRight.position.set(.3, .75, 0);
   root.add(body, shirtPanel, head, legLeft, legRight);
   root.scale.setScalar(1.12);
   return root;
+}
+
+function createCharacterLimb(radius: number, length: number, material: THREE.Material): THREE.Group {
+  const pivot = new THREE.Group();
+  const limb = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 5, 10), material);
+  limb.position.y = -length / 2;
+  limb.castShadow = true;
+  pivot.add(limb);
+  return pivot;
 }
 
 function createPenthouse(): THREE.Group {

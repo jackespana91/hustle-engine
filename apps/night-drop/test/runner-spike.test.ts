@@ -9,6 +9,7 @@ import {
   NIGHT_DROP_RUNNER_ROUTES,
   composeNightDropRunnerRoute,
 } from "../src/runner-spike/runner-routes.js";
+import { describeNightDropBuilding } from "../src/runner-spike/night-drop-building-kit.js";
 
 describe("Night Drop cinematic runner routes", () => {
   it("projects a real deterministic RouteRun preview into a spatial presentation route", () => {
@@ -253,5 +254,19 @@ describe("Night Drop cinematic runner routes", () => {
       betMinor: 100,
       winMinor: 2_400,
     });
+  });
+});
+
+describe("Night Drop 3D building kit", () => {
+  it("produces a deterministic mix of authored city archetypes", () => {
+    const firstPass = Array.from({ length: 12 }, (_, index) => describeNightDropBuilding(index, index % 2));
+    const secondPass = Array.from({ length: 12 }, (_, index) => describeNightDropBuilding(index, index % 2));
+
+    expect(secondPass).toEqual(firstPass);
+    expect(new Set(firstPass.map(({ archetype }) => archetype))).toEqual(new Set([
+      "glasshouse", "night-market", "service-block", "stacked-flats",
+    ]));
+    expect(new Set(firstPass.map(({ roofTreatment }) => roofTreatment)).size).toBeGreaterThanOrEqual(3);
+    expect(firstPass.some(({ hasAwning }) => hasAwning)).toBe(true);
   });
 });
