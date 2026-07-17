@@ -66,7 +66,7 @@ describe("NightDropTheme", () => {
   it("registers and resolves a token-driven game theme", () => {
     const { theme, runtime } = createNightDropThemeRuntime();
     expect(theme.appliedThemeIds).toEqual([NightDropFoundationTheme.id, NightDropTheme.id]);
-    expect(runtime.resolveAlias("route.active")).toBe("#92ff3e");
+    expect(runtime.resolveAlias("route.active")).toBe("#9b35ff");
     expect(runtime.resolveAssetAlias("character.runner")).toBe("character.dash");
   });
 

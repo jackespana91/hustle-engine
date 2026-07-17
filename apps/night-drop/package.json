@@ -5,12 +5,17 @@
   "type": "module",
   "dependencies": {
     "@hustle/core": "0.1.0",
-    "@hustle/routerun": "0.1.0"
+    "@hustle/routerun": "0.1.0",
+    "three": "^0.185.1"
   },
   "scripts": {
     "dev": "vite",
+    "preview": "vite preview",
     "build": "vite build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.1"
   }
 }

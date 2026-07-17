@@ -1,7 +1,17 @@
-const visualResetRequested = new URLSearchParams(window.location.search).get("visualReset") === "1";
+/// <reference types="vite/client" />
 
-if (import.meta.env.DEV && visualResetRequested) {
-  void import("./visual-reset/visual-reset.js");
-} else {
-  void import("./main.js");
+const query = new URLSearchParams(window.location.search);
+
+void bootstrap();
+
+async function bootstrap(): Promise<void> {
+  if (query.get("runnerSpike") === "1") {
+    await import("./runner-spike/runner-spike.js");
+    return;
+  }
+  if (import.meta.env.DEV && query.get("visualReset") === "1") {
+    await import("./visual-reset/visual-reset.js");
+    return;
+  }
+  await import("./main.js");
 }

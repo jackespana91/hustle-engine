@@ -1,6 +1,7 @@
 export * from "./board/index.js";
 export * from "./tiles/index.js";
 export * from "./route/index.js";
+export * from "./spatial/index.js";
 export * from "./runner/index.js";
 export * from "./overlays/index.js";
 export * from "./cascade/index.js";
