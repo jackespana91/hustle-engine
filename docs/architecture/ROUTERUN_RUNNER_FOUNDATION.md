@@ -28,7 +28,7 @@ game-specific route configurations.
 | Night Drop authored obstacle lane offset | 2.8 world units |
 | Start acceleration blend | 920ms |
 | Obstacle reaction window target | 1.7–3.1 seconds |
-| Junction decision window target | 1.65–3.1 seconds |
+| Junction decision window target | 1.9–3.1 seconds |
 | Minimum obstacle spacing | 24 world units |
 | Maximum active streamed segments in the 88s test | 8 |
 | Stored input command limit | 64 |
@@ -62,7 +62,7 @@ clamps them to readable bounds. Its ten route configurations are covered by
 automated checks that enforce:
 
 - 1.7–3.1 seconds of warning before each obstacle;
-- 1.65–3.1 seconds of anticipation before each junction;
+- 1.9–3.1 seconds of anticipation before each junction;
 - at least 24 world units between consecutive obstacles; and
 - the same deterministic cue, prize and terminal data regardless of input.
 

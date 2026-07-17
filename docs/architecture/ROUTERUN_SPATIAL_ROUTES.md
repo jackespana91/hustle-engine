@@ -127,7 +127,7 @@ cue resolution and deterministic signatures belong to RouteRun.
 
 Night Drop balances authored lead distance against each route's estimated
 travel speed. Automated coverage holds obstacle warnings between 1.7 and 3.1
-seconds, junction anticipation between 1.65 and 3.1 seconds and consecutive
+seconds, junction anticipation between 1.9 and 3.1 seconds and consecutive
 obstacle spacing at or above 24 world units across all ten profiles. The Full
 Night Shift profile is additionally simulated for its complete 88-second
 timeline at 60 updates per second, including mid-route snapshot recovery.

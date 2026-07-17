@@ -128,7 +128,7 @@ describe("Night Drop cinematic runner routes", () => {
 
       expect(Math.min(...obstacleReactionSeconds), `${id} obstacle warning`).toBeGreaterThanOrEqual(1.7);
       expect(Math.max(...obstacleReactionSeconds), `${id} obstacle warning`).toBeLessThanOrEqual(3.1);
-      expect(Math.min(...junctionReactionSeconds), `${id} junction warning`).toBeGreaterThanOrEqual(1.65);
+      expect(Math.min(...junctionReactionSeconds), `${id} junction warning`).toBeGreaterThanOrEqual(1.9);
       expect(Math.max(...junctionReactionSeconds), `${id} junction warning`).toBeLessThanOrEqual(3.1);
       expect(Math.min(...obstacleSpacing), `${id} obstacle spacing`).toBeGreaterThanOrEqual(24);
     });
@@ -221,6 +221,55 @@ describe("Night Drop cinematic runner routes", () => {
 
     expect(alley.width).toBeLessThan(ordinaryStreet.width);
     expect(alley.width).toBeLessThanOrEqual(3.4);
+  });
+
+  it("keeps every authored branch street separated, smooth and free of hairpin folds", () => {
+    NIGHT_DROP_RUNNER_ROUTES.forEach(({ id }) => {
+      const route = composeNightDropRunnerRoute(id);
+      const mainPath = new THREE.CatmullRomCurve3(
+        route.samples.map(({ position }) => new THREE.Vector3(position.x, position.y, position.z)),
+        false,
+        "centripetal",
+        .28,
+      );
+      const streets = createNightDropBranchStreets(mainPath, route);
+
+      route.branches.forEach((junction) => {
+        const alternatives = streets.filter(({ branchId }) => branchId === junction.id);
+        const nonStraight = alternatives.filter(({ direction }) => direction !== "straight");
+        nonStraight.forEach((street) => {
+          expect(street.path.getPointAt(0).distanceTo(mainPath.getPointAt(junction.entryProgress)), `${id} ${junction.id} entry`).toBeLessThan(.01);
+          expect(street.path.getPointAt(1).distanceTo(mainPath.getPointAt(junction.rejoinProgress)), `${id} ${junction.id} rejoin`).toBeLessThan(.01);
+          const lengthRatio = street.path.getLength() / (junction.rejoinDistance - junction.entryDistance);
+          expect(lengthRatio, `${id} ${junction.id} ${street.direction} length ratio`).toBeGreaterThan(.9);
+          expect(lengthRatio, `${id} ${junction.id} ${street.direction} length ratio`).toBeLessThan(1.9);
+
+          let maximumHeadingChange = 0;
+          let minimumCentralSeparation = Number.POSITIVE_INFINITY;
+          for (let sample = 1; sample <= 100; sample += 1) {
+            const localProgress = sample / 100;
+            const previousTangent = street.path.getTangentAt((sample - 1) / 100).normalize();
+            const tangent = street.path.getTangentAt(localProgress).normalize();
+            maximumHeadingChange = Math.max(maximumHeadingChange, THREE.MathUtils.radToDeg(Math.acos(
+              THREE.MathUtils.clamp(previousTangent.dot(tangent), -1, 1),
+            )));
+            if (localProgress >= .3 && localProgress <= .7) {
+              const globalProgress = junction.entryProgress + (junction.rejoinProgress - junction.entryProgress) * localProgress;
+              minimumCentralSeparation = Math.min(
+                minimumCentralSeparation,
+                street.path.getPointAt(localProgress).distanceTo(mainPath.getPointAt(globalProgress)),
+              );
+            }
+          }
+          expect(maximumHeadingChange, `${id} ${junction.id} ${street.direction} turn`).toBeLessThan(50);
+          expect(minimumCentralSeparation, `${id} ${junction.id} ${street.direction} separation`).toBeGreaterThan(10);
+        });
+
+        if (nonStraight.length === 2) {
+          expect(nonStraight[0]!.path.getPointAt(.5).distanceTo(nonStraight[1]!.path.getPointAt(.5)), `${id} ${junction.id} branch separation`).toBeGreaterThan(25);
+        }
+      });
+    });
   });
 
   it("restores obstacle progress and input history without changing the paid result", () => {

@@ -83,7 +83,7 @@ export class NightDropRunnerWorld {
   private readonly shortcut = createShortcutTunnel();
   private readonly checkpoint = createCheckpoint();
   private readonly penthouse = createPenthouse();
-  private readonly rain = createRain();
+  private readonly rain: THREE.Points;
   private readonly continuationProgress: number;
   private readonly shortcutProgress: number;
   private readonly checkpointProgress: number;
@@ -126,6 +126,7 @@ export class NightDropRunnerWorld {
       compact: window.matchMedia("(max-width: 540px), (max-height: 700px)").matches,
       ...(deviceMemoryGb ? { deviceMemoryGb } : {}),
     });
+    this.rain = createRain(this.renderLod);
     this.effects = new NightDropRunnerEffects(this.renderLod);
     this.onPresentationCue = options.onPresentationCue;
     this.runnerController = new SpatialRunnerController(this.route);
@@ -140,7 +141,13 @@ export class NightDropRunnerWorld {
     this.shortcutProgress = requireCue(this.route, "shortcut").progress;
     this.checkpointProgress = requireCue(this.route, "checkpoint").progress;
     this.destinationProgress = requireCue(this.route, "destination").progress;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: this.renderLod !== "low",
+      alpha: false,
+      stencil: false,
+      powerPreference: "high-performance",
+    });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.48;
@@ -417,7 +424,11 @@ export class NightDropRunnerWorld {
     cyanFill.position.set(-8, 5, -92);
     this.scene.add(cyanFill);
 
-    this.scene.add(createRoad(this.path, this.route));
+    const road = createRoad(this.path, this.route);
+    freezeStaticTransforms(road);
+    freezeStaticTransforms(this.city);
+    freezeStaticTransforms(this.junctions);
+    this.scene.add(road);
     this.scene.add(this.city);
     this.scene.add(this.junctions);
     this.buildRouteMarkers();
@@ -552,7 +563,8 @@ export class NightDropRunnerWorld {
 
     const cameraDistance = (moving ? 8.85 - runningBlend * 1.2 : 8.85) + junctionAnticipation * 1.15 + obstacleAnticipation * .45;
     const cameraHeight = (moving ? 4.82 - runningBlend * .56 : 4.82) + junctionAnticipation * .52 + obstacleAnticipation * .18;
-    const aheadProgress = Math.min(.999, progress + .025);
+    const cameraLookAheadDistance = 9.5;
+    const aheadProgress = Math.min(.999, progress + cameraLookAheadDistance / this.route.totalLength);
     const aheadStreetPose = resolveNightDropBranchStreetPose(this.branchStreets, this.route, runnerState.branchSelections, aheadProgress);
     const aheadTangent = aheadStreetPose?.tangent ?? this.path.getTangentAt(aheadProgress).normalize();
     const turnStrength = Math.max(-1, Math.min(1, travelTangent.x * aheadTangent.z - travelTangent.z * aheadTangent.x));
@@ -579,7 +591,8 @@ export class NightDropRunnerWorld {
     this.routeMarkers.children.forEach((marker) => {
       const markerProgress = marker.userData.progress as number;
       placeOnSelectedStreet(marker, this.path, this.branchStreets, this.route, runnerState.branchSelections, markerProgress, 0, 0);
-      marker.visible = markerProgress > progress + .018 && markerProgress < progress + .24;
+      const markerDistance = (markerProgress - progress) * this.route.totalLength;
+      marker.visible = markerDistance > 8 && markerDistance < (this.compactRenderMode ? 86 : 118);
     });
     this.packages.forEach(({ root, cue, collectedAtMs }) => {
       const difference = collectedAtMs - elapsedMs;
@@ -645,6 +658,11 @@ export class NightDropRunnerWorld {
       object.visible = activeSegments.has(String(object.userData.segmentId ?? ""))
         && object.userData.productionReplaced !== true
         && selectedBranchCity;
+    });
+    this.junctions.children.forEach((object) => {
+      const segmentId = String(object.userData.segmentId ?? "");
+      object.visible = activeSegments.has(segmentId)
+        || object.userData.junctionId === decision?.id;
     });
     this.stage.dataset.activeSegments = routeWindow.activeSegmentIds.join(",");
     this.stage.dataset.lane = String(runnerState.lane);
@@ -863,7 +881,7 @@ function routeWidthAtProgress(route: ComposedSpatialRoute, progress: number): nu
     ?? 4.8;
 }
 
-function createRibbon(path: THREE.CatmullRomCurve3, halfWidth: number, y: number, material: THREE.Material): THREE.Mesh {
+function createRibbon(path: THREE.Curve<THREE.Vector3>, halfWidth: number, y: number, material: THREE.Material): THREE.Mesh {
   const vertices: number[] = [];
   const indices: number[] = [];
   const segments = 150;
@@ -919,16 +937,18 @@ function createCity(
       const facadeEdge = segmentKind === "alley" ? 6.3 : 11.6;
       const buildingPosition = point.clone().addScaledVector(sideVector, side * (facadeEdge + depth / 2));
       if (isNearStreetNetwork(buildingPosition, branchClearancePoints, depth / 2 + 7.4)) return;
-      const building = createNightDropBuilding({
-        index,
-        sideIndex,
-        width,
-        depth,
-        height,
-        accent,
-        district: district.id,
-        ...(label ? { label } : {}),
-      });
+      const building = lod === "low"
+        ? createJunctionBuilding(width, height, depth, accent, false)
+        : createNightDropBuilding({
+            index,
+            sideIndex,
+            width,
+            depth,
+            height,
+            accent,
+            district: district.id,
+            ...(label ? { label } : {}),
+          });
       building.position.copy(buildingPosition);
       building.position.y = point.y;
       building.lookAt(point.clone().setY(point.y));
@@ -1405,6 +1425,10 @@ function createJunctionGeometry(
 ): THREE.Group {
   const group = new THREE.Group();
   route.branches.forEach((branchDefinition) => {
+    const junctionGroup = new THREE.Group();
+    junctionGroup.userData.segmentId = segmentAtProgress(route, branchDefinition.entryProgress);
+    junctionGroup.userData.junctionId = branchDefinition.id;
+    group.add(junctionGroup);
     const branchEntry = path.getPointAt(branchDefinition.entryProgress);
     const entryTangent = path.getTangentAt(branchDefinition.entryProgress).normalize();
     const entryPoint = branchEntry.clone().addScaledVector(entryTangent, NIGHT_DROP_JUNCTION_CENTRE_ADVANCE);
@@ -1423,7 +1447,7 @@ function createJunctionGeometry(
       new THREE.MeshStandardMaterial({ color: 0x263541, roughness: .74, metalness: .2 }),
     );
     crossStreetShoulder.receiveShadow = true;
-    group.add(crossStreetShoulder);
+    junctionGroup.add(crossStreetShoulder);
     const crossStreet = createRibbon(
       crossStreetPath,
       4.35,
@@ -1431,7 +1455,7 @@ function createJunctionGeometry(
       new THREE.MeshStandardMaterial({ color: 0x355f70, roughness: .28, metalness: .72, emissive: 0x0f5260, emissiveIntensity: .45 }),
     );
     crossStreet.receiveShadow = true;
-    group.add(crossStreet);
+    junctionGroup.add(crossStreet);
     const curbMaterial = new THREE.LineBasicMaterial({ color: 0x40f8ff, transparent: true, opacity: .42 });
     ([-1, 1] as const).forEach((edge) => {
       const curbPoints = [
@@ -1439,7 +1463,7 @@ function createJunctionGeometry(
         entryPoint.clone().addScaledVector(entrySide, 30).addScaledVector(entryTangent, edge * 4.35),
       ];
       curbPoints.forEach((point) => { point.y += .1; });
-      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curbPoints), curbMaterial));
+      junctionGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curbPoints), curbMaterial));
     });
     const laneMarkingMaterial = new THREE.MeshBasicMaterial({ color: 0xb7fdff, transparent: true, opacity: .64 });
     for (let distance = -26; distance <= 26; distance += 4) {
@@ -1447,7 +1471,7 @@ function createJunctionGeometry(
       marking.position.copy(entryPoint).addScaledVector(entrySide, distance);
       marking.position.y += .075;
       marking.lookAt(entryPoint.clone().addScaledVector(entrySide, distance + 2));
-      group.add(marking);
+      junctionGroup.add(marking);
     }
 
     if (branchDefinition.junctionKind === "t-junction") {
@@ -1459,7 +1483,7 @@ function createJunctionGeometry(
       deadEndApron.position.y += .07;
       deadEndApron.lookAt(entryPoint.clone().add(entryTangent));
       deadEndApron.receiveShadow = true;
-      group.add(deadEndApron);
+      junctionGroup.add(deadEndApron);
       const closure = new THREE.Group();
       const danger = new THREE.MeshStandardMaterial({ color: 0x7f2638, emissive: 0xff264d, emissiveIntensity: .55, roughness: .42 });
       for (let index = -2; index <= 2; index += 1) {
@@ -1469,7 +1493,7 @@ function createJunctionGeometry(
       }
       closure.position.copy(entryPoint).addScaledVector(entryTangent, 6.4);
       closure.lookAt(entryPoint.clone().addScaledVector(entryTangent, 7.4));
-      group.add(closure);
+      junctionGroup.add(closure);
       const stopLine = new THREE.Mesh(
         new THREE.BoxGeometry(8.4, .045, .32),
         new THREE.MeshBasicMaterial({ color: 0xff5275, transparent: true, opacity: .88 }),
@@ -1477,7 +1501,7 @@ function createJunctionGeometry(
       stopLine.position.copy(entryPoint).addScaledVector(entryTangent, -1.6);
       stopLine.position.y += .09;
       stopLine.lookAt(entryPoint.clone().add(entryTangent));
-      group.add(stopLine);
+      junctionGroup.add(stopLine);
     }
 
     branchDefinition.alternatives.forEach((alternative) => {
@@ -1502,7 +1526,7 @@ function createJunctionGeometry(
         );
         shoulder.receiveShadow = true;
         tagJunctionMesh(shoulder, branchDefinition.id, alternative.id, .98, 0);
-        group.add(shoulder);
+        junctionGroup.add(shoulder);
 
         const roadMaterial = new THREE.MeshStandardMaterial({
           color: 0x254758,
@@ -1516,7 +1540,7 @@ function createJunctionGeometry(
         const road = createRibbon(branchPath, NIGHT_DROP_BRANCH_STREET_HALF_WIDTH, .028, roadMaterial);
         road.receiveShadow = true;
         tagJunctionMesh(road, branchDefinition.id, alternative.id, .96, .28);
-        group.add(road);
+        junctionGroup.add(road);
 
         const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x40f8ff, transparent: true, opacity: .48 });
         const leftEdge = createStreetEdgeLine(branchPath, -NIGHT_DROP_BRANCH_STREET_HALF_WIDTH, edgeMaterial);
@@ -1525,7 +1549,7 @@ function createJunctionGeometry(
         tagJunctionMesh(leftEdge, branchDefinition.id, alternative.id, .48, 0);
         tagJunctionMesh(rightEdge, branchDefinition.id, alternative.id, .48, 0);
         tagJunctionMesh(centreLine, branchDefinition.id, alternative.id, .52, 0);
-        group.add(leftEdge, rightEdge, centreLine);
+        junctionGroup.add(leftEdge, rightEdge, centreLine);
       }
 
       const guideMaterial = new THREE.MeshBasicMaterial({
@@ -1535,7 +1559,7 @@ function createJunctionGeometry(
       });
       const guide = new THREE.Mesh(new THREE.TubeGeometry(branchPath, 56, .11, 6, false), guideMaterial);
       tagJunctionMesh(guide, branchDefinition.id, alternative.id, .64, 0);
-      group.add(guide);
+      junctionGroup.add(guide);
 
       const directionOffset = alternative.direction === "left" ? -3.2 : alternative.direction === "right" ? 3.2 : 0;
       const sign = createNeonSign(directionLabel(alternative.direction).toUpperCase(), alternative.direction === "straight" ? 0xb7fdff : 0x40f8ff);
@@ -1546,14 +1570,14 @@ function createJunctionGeometry(
       sign.lookAt(entryPoint.clone().addScaledVector(entryTangent, -8).setY(sign.position.y));
       sign.scale.setScalar(.76);
       tagJunctionMesh(sign, branchDefinition.id, alternative.id, 1, 0);
-      group.add(sign);
+      junctionGroup.add(sign);
     });
   });
   return group;
 }
 
 function createStreetEdgeLine(
-  path: THREE.CatmullRomCurve3,
+  path: THREE.Curve<THREE.Vector3>,
   offset: number,
   material: THREE.LineBasicMaterial,
 ): THREE.Line {
@@ -1569,7 +1593,7 @@ function createStreetEdgeLine(
   return new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
 }
 
-function createStreetCentreLine(path: THREE.CatmullRomCurve3): THREE.Line {
+function createStreetCentreLine(path: THREE.Curve<THREE.Vector3>): THREE.Line {
   const points = Array.from({ length: 97 }, (_, index) => {
     const point = path.getPointAt(index / 96);
     point.y += .115;
@@ -1873,9 +1897,10 @@ function createNeonSign(label: string, color: number): THREE.Mesh {
   return new THREE.Mesh(new THREE.PlaneGeometry(2.8, .8), material);
 }
 
-function createRain(): THREE.Points {
-  const positions = new Float32Array(540 * 3);
-  for (let index = 0; index < 540; index += 1) {
+function createRain(lod: NightDropRunnerLod): THREE.Points {
+  const dropCount = lod === "low" ? 220 : lod === "medium" ? 380 : 540;
+  const positions = new Float32Array(dropCount * 3);
+  for (let index = 0; index < dropCount; index += 1) {
     positions[index * 3] = -35 + seeded(index * 3) * 70;
     positions[index * 3 + 1] = .2 + seeded(index * 5) * 30;
     positions[index * 3 + 2] = -35 + seeded(index * 7) * 70;
@@ -1884,6 +1909,13 @@ function createRain(): THREE.Points {
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   const material = new THREE.PointsMaterial({ color: 0x9feaff, size: .035, transparent: true, opacity: .55, sizeAttenuation: true });
   return new THREE.Points(geometry, material);
+}
+
+function freezeStaticTransforms(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    object.updateMatrix();
+    object.matrixAutoUpdate = false;
+  });
 }
 
 function placeAt(group: THREE.Object3D, path: THREE.CatmullRomCurve3, progress: number, lateral: number, y: number): void {

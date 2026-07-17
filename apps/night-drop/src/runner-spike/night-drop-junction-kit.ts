@@ -11,7 +11,7 @@ export interface NightDropBranchStreet {
   readonly direction: ComposedSpatialRouteBranchAlternative["direction"];
   readonly entryProgress: number;
   readonly rejoinProgress: number;
-  readonly path: THREE.CatmullRomCurve3;
+  readonly path: THREE.Curve<THREE.Vector3>;
 }
 
 export interface NightDropBranchStreetPose {
@@ -23,7 +23,7 @@ export interface NightDropBranchStreetPose {
 }
 
 export const NIGHT_DROP_BRANCH_STREET_HALF_WIDTH = 3.55;
-export const NIGHT_DROP_JUNCTION_CENTRE_ADVANCE = 3.8;
+export const NIGHT_DROP_JUNCTION_CENTRE_ADVANCE = 10;
 
 export function createNightDropBranchStreets(
   mainPath: THREE.CatmullRomCurve3,
@@ -66,7 +66,7 @@ function createAlternativePath(
   mainPath: THREE.CatmullRomCurve3,
   branch: ComposedSpatialRouteBranch,
   alternative: ComposedSpatialRouteBranchAlternative,
-): THREE.CatmullRomCurve3 {
+): THREE.Curve<THREE.Vector3> {
   if (alternative.direction === "straight") {
     return new THREE.CatmullRomCurve3(
       [0, .25, .5, .75, 1].map((localProgress) => mainPath.getPointAt(globalProgress(branch, localProgress))),
@@ -83,35 +83,62 @@ function createAlternativePath(
   const rejoin = mainPath.getPointAt(branch.rejoinProgress);
   const rejoinTangent = mainPath.getTangentAt(branch.rejoinProgress).normalize();
   const rejoinSide = sideOf(rejoinTangent);
-  const streetOffset = Math.max(26, Math.abs(alternative.lateralOffset) * 2.2);
+  const outward = entrySide.clone().multiplyScalar(direction).normalize();
+  const rejoinOutward = rejoinSide.dot(outward) < 0 ? rejoinSide.clone().multiplyScalar(-1) : rejoinSide;
+  const branchSpan = branch.rejoinDistance - branch.entryDistance;
+  const streetOffset = Math.max(18, Math.min(26, branchSpan * .24));
   const entryForward = NIGHT_DROP_JUNCTION_CENTRE_ADVANCE;
   const rejoinBack = NIGHT_DROP_JUNCTION_CENTRE_ADVANCE;
-  const quarterProgress = globalProgress(branch, .27);
-  const quarter = mainPath.getPointAt(quarterProgress);
-  const quarterSide = sideOf(mainPath.getTangentAt(quarterProgress).normalize());
-  const middleProgress = globalProgress(branch, .5);
-  const middle = mainPath.getPointAt(middleProgress);
-  const middleSide = sideOf(mainPath.getTangentAt(middleProgress).normalize());
-  const threeQuarterProgress = globalProgress(branch, .73);
-  const threeQuarter = mainPath.getPointAt(threeQuarterProgress);
-  const threeQuarterSide = sideOf(mainPath.getTangentAt(threeQuarterProgress).normalize());
+  const outerEntry = entry.clone()
+    .addScaledVector(entryTangent, entryForward)
+    .addScaledVector(entrySide, direction * streetOffset);
+  const outerRejoin = rejoin.clone()
+    .addScaledVector(rejoinTangent, -rejoinBack)
+    .addScaledVector(rejoinOutward, streetOffset);
+  const mainSamples = Array.from({ length: 13 }, (_, index) => mainPath.getPointAt(globalProgress(branch, index / 12)));
+  const mainCentre = mainSamples.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / mainSamples.length);
+  const safeProjection = Math.max(...mainSamples.map((point) => point.clone().sub(mainCentre).dot(outward))) + streetOffset;
+  const pushOutsideMainRoute = (point: THREE.Vector3): THREE.Vector3 => {
+    const projection = point.clone().sub(mainCentre).dot(outward);
+    return point.clone().addScaledVector(outward, Math.max(0, safeProjection - projection));
+  };
+  const connectorOne = pushOutsideMainRoute(outerEntry.clone().lerp(outerRejoin, .3));
+  const connectorTwo = pushOutsideMainRoute(outerEntry.clone().lerp(outerRejoin, .7));
 
-  const points = [
+  return createRoundedStreetPath([
     entry,
-    entry.clone().addScaledVector(entryTangent, entryForward * .52),
-    entry.clone().addScaledVector(entryTangent, entryForward).addScaledVector(entrySide, direction * 3.5),
-    entry.clone().addScaledVector(entryTangent, entryForward).addScaledVector(entrySide, direction * 10),
-    entry.clone().addScaledVector(entryTangent, entryForward).addScaledVector(entrySide, direction * streetOffset),
-    quarter.clone().addScaledVector(quarterSide, direction * streetOffset),
-    middle.clone().addScaledVector(middleSide, direction * streetOffset),
-    threeQuarter.clone().addScaledVector(threeQuarterSide, direction * streetOffset),
-    rejoin.clone().addScaledVector(rejoinTangent, -rejoinBack).addScaledVector(rejoinSide, direction * streetOffset),
-    rejoin.clone().addScaledVector(rejoinTangent, -rejoinBack).addScaledVector(rejoinSide, direction * 10),
-    rejoin.clone().addScaledVector(rejoinTangent, -rejoinBack).addScaledVector(rejoinSide, direction * 3.5),
-    rejoin.clone().addScaledVector(rejoinTangent, -rejoinBack * .52),
+    entry.clone().addScaledVector(entryTangent, entryForward),
+    outerEntry,
+    connectorOne,
+    connectorTwo,
+    outerRejoin,
+    rejoin.clone().addScaledVector(rejoinTangent, -rejoinBack),
     rejoin,
-  ];
-  return new THREE.CatmullRomCurve3(points, false, "centripetal", .22);
+  ]);
+}
+
+function createRoundedStreetPath(points: readonly THREE.Vector3[]): THREE.CurvePath<THREE.Vector3> {
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  let cursor = points[0]!.clone();
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1]!;
+    const corner = points[index]!;
+    const next = points[index + 1]!;
+    const incoming = corner.clone().sub(previous);
+    const outgoing = next.clone().sub(corner);
+    const incomingLength = incoming.length();
+    const outgoingLength = outgoing.length();
+    if (incomingLength <= Number.EPSILON || outgoingLength <= Number.EPSILON) continue;
+    const radius = Math.min(11, incomingLength * .48, outgoingLength * .48);
+    const before = corner.clone().addScaledVector(incoming.normalize(), -radius);
+    const after = corner.clone().addScaledVector(outgoing.normalize(), radius);
+    if (cursor.distanceToSquared(before) > .0001) path.add(new THREE.LineCurve3(cursor, before));
+    path.add(new THREE.QuadraticBezierCurve3(before, corner.clone(), after));
+    cursor = after;
+  }
+  const end = points.at(-1)!;
+  if (cursor.distanceToSquared(end) > .0001) path.add(new THREE.LineCurve3(cursor, end.clone()));
+  return path;
 }
 
 function globalProgress(branch: ComposedSpatialRouteBranch, localProgress: number): number {

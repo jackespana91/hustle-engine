@@ -163,7 +163,8 @@ presentation curve that:
 
 - enters through the physical junction centre;
 - turns onto a perpendicular cross street;
-- travels around a complete 26m city block;
+- travels around an adaptive 18–26m city block, sized to the available route
+  span;
 - rejoins the authored RouteRun centre route at the declared rejoin point;
 - carries Dash, route arrows, packages, obstacles and feature landmarks on the
   same selected curve.
@@ -173,6 +174,11 @@ T-junctions expose only left and right streets; the forward road is covered by
 a physical dead-end apron, barrier and blocked facade. The cross street owns a
 separate wet-road surface, shoulders, curbs and dashed centre markings so it
 reads as street geometry even before a choice is made.
+
+The branch street is built from independent rounded line and corner sections,
+not an offset copy of the centre route. Its outer connectors are projected
+beyond the sampled centre-route envelope so a tight bend cannot fold the side
+street back through the main road.
 
 The city generator samples every non-straight branch before placing buildings.
 It treats each road and shoulder as protected geometry, excludes the street

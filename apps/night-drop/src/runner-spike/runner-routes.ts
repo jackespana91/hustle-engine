@@ -363,7 +363,7 @@ function generatedProfile(values: {
   const travelStartMs = Math.min(1_750, Math.round(values.durationMs * .11));
   const travelDurationSeconds = Math.max(1, (values.durationMs - 3_050 - travelStartMs) / 1_000);
   const estimatedSpeed = totalLength / travelDurationSeconds;
-  const junctionLeadDistance = Math.round(Math.max(38, Math.min(56, estimatedSpeed * 2.05)));
+  const junctionLeadDistance = Math.round(Math.max(42, Math.min(68, estimatedSpeed * 2.35)));
   const obstacleLeadDistance = Math.round(Math.max(42, Math.min(58, estimatedSpeed * 2.1)));
   const branches = branchSpans.map(([entry, rejoin], index) => {
     const junctionKind: Exclude<SpatialRouteJunctionKind, "fork"> = (values.seed + index) % 2 === 0 ? "crossroads" : "t-junction";
