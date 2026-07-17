@@ -19,8 +19,13 @@ Outputs are written under
 - four PBR material sets with albedo, normal, roughness and emissive maps;
 - `production-report.json` with asset budgets and inventory.
 
-The application loads the production pack by default. Add `assets=proxy` to a
-runner preview URL to compare it with the procedural fallback.
+The application loads the production Dash by default. Whole-street environment
+GLBs are retained for inspection but are not installed into the player-facing
+route because a rigid module cannot follow long curved segments safely. Add
+`environment=modules` to inspect them explicitly, or `assets=proxy` to compare
+the complete procedural fallback. Future environment exports must split
+buildings and props into independently placeable pieces before becoming the
+default.
 
 ## Validate
 

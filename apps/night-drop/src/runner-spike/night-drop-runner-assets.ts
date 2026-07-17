@@ -74,6 +74,8 @@ export interface NightDropRunnerDeviceProfile {
   readonly compact: boolean;
 }
 
+export type NightDropEnvironmentInstallation = "curve-safe" | "modules";
+
 export interface LoadedNightDropDashAsset {
   readonly root: THREE.Group;
   readonly mixer: THREE.AnimationMixer;
@@ -178,6 +180,13 @@ export function selectNightDropRunnerLod(profile: NightDropRunnerDeviceProfile):
   if (profile.compact || profile.viewportWidth < 520 || memory <= 3 || profile.pixelRatio > 2.5) return "low";
   if (profile.viewportWidth >= 1_100 && memory >= 8 && profile.pixelRatio <= 2) return "high";
   return "medium";
+}
+
+export function selectNightDropEnvironmentInstallation(
+  productionAssets: boolean,
+  requestedEnvironment: string | null,
+): NightDropEnvironmentInstallation {
+  return productionAssets && requestedEnvironment === "modules" ? "modules" : "curve-safe";
 }
 
 export function resolveNightDropEnvironmentRole(

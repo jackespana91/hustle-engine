@@ -13,6 +13,7 @@ import {
   isNightDropRunnerRouteId,
   type NightDropRunnerRouteId,
 } from "./runner-routes.js";
+import { selectNightDropEnvironmentInstallation } from "./night-drop-runner-assets.js";
 import { NightDropRunnerWorld } from "./runner-world.js";
 import {
   NightDropRunnerFeedbackController,
@@ -26,6 +27,8 @@ applyNightDropTheme(document.documentElement, theme);
 
 const query = new URLSearchParams(window.location.search);
 const productionAssetsEnabled = query.get("assets") !== "proxy";
+const environmentInstallation = selectNightDropEnvironmentInstallation(productionAssetsEnabled, query.get("environment"));
+const productionEnvironmentAssetsEnabled = environmentInstallation === "modules";
 const feedback = new NightDropRunnerFeedbackController();
 const requestedRoute = query.get("route");
 let plan = createNightDropRunnerPlan(isNightDropRunnerRouteId(requestedRoute) ? requestedRoute : DEFAULT_NIGHT_DROP_RUNNER_ROUTE);
@@ -432,6 +435,7 @@ function recoverRound(): void {
 function createRunnerWorld(): NightDropRunnerWorld {
   const world = new NightDropRunnerWorld(worldCanvas, stage, plan, {
     productionAssets: productionAssetsEnabled,
+    productionEnvironmentAssets: productionEnvironmentAssetsEnabled,
     onPresentationCue: (cue) => feedback.cue(cue),
   });
   stage.dataset.assetStatus = productionAssetsEnabled ? "loading" : "ready";

@@ -46,6 +46,7 @@ const CITY_LABELS = ["OPEN LATE", "24/7", "NIGHT MART", "GLASSHOUSE", "SERVICE",
 
 export interface NightDropRunnerWorldOptions {
   readonly productionAssets?: boolean;
+  readonly productionEnvironmentAssets?: boolean;
   readonly productionManifest?: NightDropRunnerProductionManifest;
   readonly onPresentationCue?: (cue: NightDropRunnerFeedbackCue) => void;
 }
@@ -310,12 +311,18 @@ export class NightDropRunnerWorld {
     const manifest = options.productionManifest ?? NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST;
     validateNightDropRunnerProductionManifest(manifest);
     this.stage.dataset.productionAssets = String(options.productionAssets === true);
+    this.stage.dataset.productionEnvironmentAssets = String(options.productionEnvironmentAssets === true);
     this.stage.dataset.dashAssetMode = this.dashActor.inspect().mode;
+    this.stage.dataset.environmentAssetMode = options.productionEnvironmentAssets ? "loading" : "curve-safe";
+    this.stage.dataset.environmentAssetSegments = "0";
+    this.stage.dataset.environmentAssetMissingRoles = "0";
     if (!options.productionAssets) return;
     const loader = new NightDropRunnerProductionLoader();
     const [status] = await Promise.all([
       this.dashActor.loadProduction(loader, manifest.character),
-      this.loadProductionEnvironment(loader, manifest),
+      options.productionEnvironmentAssets
+        ? this.loadProductionEnvironment(loader, manifest)
+        : Promise.resolve(),
     ]);
     if (this.disposed) return;
     this.stage.dataset.dashAssetMode = status.mode;

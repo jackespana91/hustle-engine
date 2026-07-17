@@ -63,9 +63,10 @@ This is route/presentation variety only and never changes an outcome.
 - Cross-City first obstacle: `?runnerSpike=1&route=cross-city&obstacle=0`
 - Cross-City fourth obstacle: `?runnerSpike=1&route=cross-city&obstacle=3`
 - Frozen board baseline: `?visualReset=1`
-- The Blender production pack is enabled by default. Append `&assets=proxy`
-  only when comparing against the procedural fallback or diagnosing an asset
-  integration problem.
+- The Blender Dash is enabled by default. Buildings use curve-sampled placement
+  so they follow the real route rather than a rigid module chord. Append
+  `&environment=modules` only to inspect the quarantined whole-street GLBs, or
+  `&assets=proxy` to compare the complete procedural fallback.
 
 Stable approval frames can be selected with `runnerState`, for example:
 

@@ -16,6 +16,7 @@ import {
   NIGHT_DROP_DASH_ANIMATION_ROLES,
   NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
   resolveNightDropEnvironmentRole,
+  selectNightDropEnvironmentInstallation,
   selectNightDropRunnerLod,
   validateNightDropRunnerProductionManifest,
   type NightDropRunnerProductionManifest,
@@ -307,6 +308,12 @@ describe("Night Drop runner production asset contract", () => {
     expect(selectNightDropRunnerLod({ viewportWidth: 390, pixelRatio: 3, deviceMemoryGb: 8, compact: true })).toBe("low");
     expect(selectNightDropRunnerLod({ viewportWidth: 900, pixelRatio: 2, deviceMemoryGb: 6, compact: false })).toBe("medium");
     expect(selectNightDropRunnerLod({ viewportWidth: 1_440, pixelRatio: 2, deviceMemoryGb: 8, compact: false })).toBe("high");
+  });
+
+  it("keeps rigid environment modules behind an explicit diagnostic opt-in", () => {
+    expect(selectNightDropEnvironmentInstallation(true, null)).toBe("curve-safe");
+    expect(selectNightDropEnvironmentInstallation(true, "modules")).toBe("modules");
+    expect(selectNightDropEnvironmentInstallation(false, "modules")).toBe("curve-safe");
   });
 
   it("rejects duplicate environment roles before any production asset is fetched", () => {

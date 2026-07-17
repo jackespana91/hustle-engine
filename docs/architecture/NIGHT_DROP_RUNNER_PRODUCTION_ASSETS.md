@@ -2,17 +2,25 @@
 
 ## Status
 
-The first Blender-authored production pack is installed and enabled by default.
-It contains a segmented bone-rigged stylised Dash with all thirteen named animation clips, all
-twelve semantic environment modules at three LOD levels, and four shared PBR
-material-map sets. The pack establishes the in-game production pipeline and the
-first Glasshouse Heights visual language; further art-review passes can improve
-character sculpting, facade variety and texture resolution without changing the
-contract.
+The first Blender-authored production pack is installed. The segmented,
+bone-rigged Dash and all thirteen named animation clips are enabled by default.
+The pack also contains twelve semantic environment modules at three LOD levels
+and four shared PBR material-map sets.
+
+Rigid whole-street environment modules are not player-facing by default. A
+single transformed module cannot follow a long curved route segment without
+its road slab or buildings cutting across the spline. The live game therefore
+uses curve-sampled building placement and the continuous route ribbon, while
+the Blender modules remain available for asset inspection until they are split
+into independently placeable building and prop pieces.
 
 Use the procedural fallback only for comparison or diagnosis:
 
 `?runnerSpike=1&route=cross-city&assets=proxy`
+
+To inspect the quarantined rigid environment modules explicitly:
+
+`?runnerSpike=1&route=cross-city&environment=modules`
 
 A failed production load still returns safely to that fallback without changing
 the route, outcome, wallet value or recovery snapshot.
@@ -124,7 +132,9 @@ The physical streamed city is the environment.
 - Reduce near-route mass before changing the camera. Camera movement must not
   be used to hide invalid physical placement.
 
-Production manifest `1.4.0` is the first pack generated against these rules.
+Production manifest `1.4.0` is the first pack generated against these rules,
+but the runtime still requires independently placeable environment pieces
+before those Blender buildings can replace curve-sampled placement safely.
 
 ## Materials and textures
 
@@ -191,18 +201,21 @@ authored runner audio required by this third-person presentation.
 
 ## Performance and QA gate
 
-The production pack chooses low LOD at 390×844 and medium on the tested desktop
-profile. Static environment meshes are batched by material during Blender export
-so added facade detail does not create a draw call per object. Cross-City held
-60.0 FPS on the 390×844 profile with a 16.67ms average frame, a 17.50ms worst
-steady frame, 83 draw calls, 24,548 rendered triangles and four active streamed
-segments. Full Night Shift at 4× held 60.0 FPS with 66 draw calls and 21,888
-triangles. The 1440×900 centred stage also held 60.0 FPS after asset loading.
+The production character chooses low LOD at 390×844 and medium on the tested
+desktop profile. The quarantined rigid environment modules remain batched by
+material for diagnostic comparison, but their earlier performance results are
+not an acceptance signal: correct route geometry takes priority over a module
+that renders quickly in the wrong position.
 
-Play is disabled briefly while the selected route's production character and
-environment roles load. The UI exposes a clear loading state, then enables the
-round only after the production pack is ready. The proxy path remains immediate
-for recovery comparison.
+The player-facing curve-safe Cross-City idle view rendered 7,750 triangles at
+390×844 during this correction pass, with production Dash active and no
+horizontal overflow. Further optimisation should batch the independently
+placed city kit only after its curve and junction placement is approved.
+
+Play is disabled briefly while the production character loads. Curve-sampled
+environment placement is available immediately; rigid environment modules load
+only when explicitly requested for diagnosis. The full proxy path remains
+available for recovery comparison.
 
 Before accepting a production pack:
 
