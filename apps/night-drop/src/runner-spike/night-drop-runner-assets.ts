@@ -81,7 +81,13 @@ export interface LoadedNightDropDashAsset {
   readonly mixer: THREE.AnimationMixer;
   readonly actions: Readonly<Partial<Record<NightDropDashAnimationRole, THREE.AnimationAction>>>;
   readonly clips: readonly THREE.AnimationClip[];
+  readonly anchoredNodes: readonly NightDropDashAnimationAnchor[];
   readonly sourceUrl: string;
+}
+
+export interface NightDropDashAnimationAnchor {
+  readonly node: THREE.Object3D;
+  readonly position: THREE.Vector3;
 }
 
 export const NIGHT_DROP_DASH_ANIMATION_ROLES: readonly NightDropDashAnimationRole[] = [
@@ -91,10 +97,10 @@ export const NIGHT_DROP_DASH_ANIMATION_ROLES: readonly NightDropDashAnimationRol
 
 export const NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST: NightDropRunnerProductionManifest = {
   id: "night-drop.runner-production",
-  version: "1.4.0",
+  version: "1.9.0",
   character: {
     id: "character.dash",
-    modelUrl: "/assets/night-drop/runner/characters/dash/dash.glb?v=blender-v5",
+    modelUrl: "/assets/night-drop/runner/characters/dash/dash.glb?v=blender-skin-v12",
     scale: 1,
     groundOffset: 0,
     forwardAxis: "+z",
@@ -264,17 +270,37 @@ function prepareDashAsset(gltf: GLTF, spec: NightDropDashAssetSpec): LoadedNight
   root.userData.assetId = spec.id;
   root.userData.sourceUrl = spec.modelUrl;
   configureProductionMeshes(root);
+  const clips = gltf.animations.map(stripNightDropDashRootMotion);
+  const anchoredNodes = ["Dash_Rig", "root"]
+    .map((name) => root.getObjectByName(name))
+    .filter((node): node is THREE.Object3D => node !== undefined)
+    .map((node) => ({ node, position: node.position.clone() }));
   const mixer = new THREE.AnimationMixer(root);
   const actions: Partial<Record<NightDropDashAnimationRole, THREE.AnimationAction>> = {};
   NIGHT_DROP_DASH_ANIMATION_ROLES.forEach((role) => {
-    const clip = findClip(gltf.animations, spec.animations[role]);
+    const clip = findClip(clips, spec.animations[role]);
     if (clip) actions[role] = mixer.clipAction(clip);
   });
   if (!actions.idle || !actions.run || !actions.jump || !actions.slide) {
     mixer.stopAllAction();
     throw new Error("Dash GLB requires idle, run, jump and slide animation clips");
   }
-  return { root, mixer, actions, clips: gltf.animations, sourceUrl: spec.modelUrl };
+  return { root, mixer, actions, clips, anchoredNodes, sourceUrl: spec.modelUrl };
+}
+
+export function stripNightDropDashRootMotion(clip: THREE.AnimationClip): THREE.AnimationClip {
+  const tracks = clip.tracks
+    .filter((track) => !isDashRootPositionTrack(track.name))
+    .map((track) => track.clone());
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode);
+}
+
+function isDashRootPositionTrack(trackName: string): boolean {
+  const normalized = trackName.trim().replaceAll("\\", "/");
+  const separator = normalized.lastIndexOf(".");
+  if (separator < 0 || normalized.slice(separator + 1).toLowerCase() !== "position") return false;
+  const target = normalized.slice(0, separator).split("/").at(-1)?.toLowerCase();
+  return target === "dash_rig" || target === "root";
 }
 
 function findClip(clips: readonly THREE.AnimationClip[], aliases: readonly string[]): THREE.AnimationClip | undefined {

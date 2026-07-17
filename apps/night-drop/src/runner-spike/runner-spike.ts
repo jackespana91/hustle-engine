@@ -38,6 +38,7 @@ let savedSnapshot: SpatialRunnerSnapshot | null = null;
 let pointerStart: (SpatialRunnerPointerSample & { readonly pointerId: number }) | null = null;
 let hasUsedSwipe = false;
 let swipeCount = 0;
+let maraTimer: number | null = null;
 
 root.innerHTML = renderRunner();
 
@@ -48,9 +49,20 @@ const worldCanvas = requiredElement<HTMLCanvasElement>(".nr-runner-world", root,
 const routeSelect = requiredElement<HTMLSelectElement>(".nr-route-select", root, "Night Drop route selector failed to mount");
 const speedSelect = requiredElement<HTMLSelectElement>(".nr-speed-select", root, "Night Drop speed selector failed to mount");
 const runnerViewport = requiredElement<HTMLElement>(".nr-viewport", root, "Night Drop runner viewport failed to mount");
+const maraCard = requiredElement<HTMLElement>(".nr-mara-card", root, "Mara dispatcher card failed to mount");
+const maraPortrait = requiredElement<HTMLImageElement>(".nr-mara-card img", root, "Mara portrait failed to mount");
+const maraMessage = requiredElement<HTMLElement>("[data-mara-message]", maraCard, "Mara message failed to mount");
+const menuButton = requiredElement<HTMLButtonElement>("[data-ui-action='menu']", root, "Night Drop menu control failed to mount");
+const menuCloseButton = requiredElement<HTMLButtonElement>("[data-ui-action='close-menu']", root, "Night Drop menu close control failed to mount");
+const soundButton = requiredElement<HTMLButtonElement>("[data-ui-action='sound']", root, "Night Drop sound control failed to mount");
+const turboButton = requiredElement<HTMLButtonElement>("[data-ui-action='turbo']", root, "Night Drop Turbo control failed to mount");
 let runnerWorld = createRunnerWorld();
 
 playButton.addEventListener("click", startRound);
+menuButton.addEventListener("click", () => setMenuOpen(true));
+menuCloseButton.addEventListener("click", () => setMenuOpen(false));
+soundButton.addEventListener("click", toggleSound);
+turboButton.addEventListener("click", toggleTurbo);
 routeSelect.addEventListener("change", () => {
   if (isNightDropRunnerRouteId(routeSelect.value)) selectRoute(routeSelect.value);
 });
@@ -106,7 +118,8 @@ Object.assign(window, {
 });
 
 function renderRunner(): string {
-  return `<main class="nr-stage" data-phase="idle" data-playing="false" data-swipe-used="false" aria-label="Night Drop cinematic runner presentation spike">
+  const runnerLabEnabled = query.has("qa") || query.has("runnerLab");
+  return `<main class="nr-stage" data-phase="idle" data-playing="false" data-swipe-used="false" data-runner-lab="${runnerLabEnabled}" aria-label="Night Drop cinematic runner presentation spike">
     <header class="nr-top-hud">
       <div class="nr-logo">${renderNightDropLogo()}</div>
       <div class="nr-top-value nr-reputation"><span>Five-Star</span><strong data-reputation>○○○○○</strong></div>
@@ -123,13 +136,17 @@ function renderRunner(): string {
 
       <div class="nr-establishing"><span>GLASSHOUSE HEIGHTS</span><strong>01:14</strong><b>DELIVERY 07</b></div>
       <div class="nr-moment"><span data-moment-kicker>ROUTE</span><strong data-moment>Waiting for address</strong></div>
+      <aside class="nr-mara-card" data-visible="false" aria-hidden="true">
+        <img src="/assets/night-drop/characters/mara/neutral.png" alt="" />
+        <div><span>DISPATCH // MARA</span><strong data-mara-message>Route locked.</strong></div>
+      </aside>
       <div class="nr-junction-warning" data-junction-warning></div>
       <div class="nr-obstacle-warning" data-obstacle-warning></div>
       <div class="nr-obstacle-result" data-obstacle-result></div>
       <div class="nr-swipe-hint" data-swipe-hint><b>SWIPE TO MOVE</b><span>← LANE · ↑ JUMP · ↓ SLIDE · LANE →</span></div>
       <div class="nr-live-status" aria-live="polite">Ready for one deterministic delivery</div>
       <label class="nr-route-picker">
-        <span>Delivery route</span>
+        <span>Next drop</span>
         <select class="nr-route-select" aria-label="Choose delivery route">
           ${plan.availableRoutes.map((route) => `<option value="${route.id}"${route.id === plan.routeId ? " selected" : ""}>${route.label} · ${Math.round(route.distance)}m</option>`).join("")}
         </select>
@@ -170,22 +187,64 @@ function renderRunner(): string {
       <div class="nr-wallet"><span>Bet</span><strong>€1.00</strong></div>
       <div class="nr-wallet nr-win"><span>Win</span><strong data-win>€0.00</strong></div>
       <div class="nr-controls">
-        <button class="nr-small" type="button"><i>☰</i><span>Menu</span></button>
+        <button class="nr-small" type="button" data-ui-action="menu"><i>☰</i><span>Menu</span></button>
         <button class="nr-play" type="button"><i>▶</i><strong>PLAY</strong><small>€1 DELIVERY</small></button>
-        <button class="nr-small" type="button"><i>⚡</i><span>Turbo</span></button>
+        <button class="nr-small" type="button" data-ui-action="turbo" aria-pressed="false"><i>⚡</i><span>Turbo</span></button>
       </div>
     </footer>
+    <div class="nr-menu-sheet" aria-hidden="true">
+      <section>
+        <span>NIGHT DROP</span>
+        <strong>Delivery settings</strong>
+        <button type="button" data-ui-action="sound" aria-pressed="true"><i>◖))</i><b>Sound</b><small>ON</small></button>
+        <button type="button" data-ui-action="close-menu"><i>×</i><b>Back to the city</b></button>
+      </section>
+    </div>
+    <div class="nr-loading" aria-live="polite">
+      <div class="nr-loading-logo">${renderNightDropLogo()}</div>
+      <span>GLASSHOUSE HEIGHTS</span>
+      <strong>Preparing the night shift</strong>
+      <i><b></b></i>
+    </div>
   </main>`;
+}
+
+function setMenuOpen(open: boolean): void {
+  if (playing && open) return;
+  stage.dataset.menuOpen = String(open);
+  requiredElement<HTMLElement>(".nr-menu-sheet", root, "Night Drop menu sheet missing").setAttribute("aria-hidden", String(!open));
+}
+
+function toggleSound(): void {
+  const enabled = soundButton.getAttribute("aria-pressed") !== "true";
+  soundButton.setAttribute("aria-pressed", String(enabled));
+  feedback.setEnabled(enabled);
+  const state = soundButton.querySelector("small");
+  if (state) state.textContent = enabled ? "ON" : "OFF";
+  stage.dataset.soundEnabled = String(enabled);
+}
+
+function toggleTurbo(): void {
+  if (playing) return;
+  const enabled = turboButton.getAttribute("aria-pressed") !== "true";
+  turboButton.setAttribute("aria-pressed", String(enabled));
+  turboButton.classList.toggle("is-active", enabled);
+  speedSelect.value = enabled ? "2" : "1";
+  stage.dataset.turbo = String(enabled);
+  liveStatus.textContent = enabled ? "Turbo preview enabled" : "Standard delivery speed enabled";
 }
 
 function startRound(): void {
   if (playing || stage.dataset.assetStatus === "loading") return;
   clearTimers();
+  setMenuOpen(false);
   resetRound();
   savedSnapshot = null;
   playing = true;
   stage.dataset.playing = "true";
   playButton.disabled = true;
+  menuButton.disabled = true;
+  turboButton.disabled = true;
   routeSelect.disabled = true;
   speedSelect.disabled = true;
   setText("[data-balance]", "€99.00");
@@ -204,6 +263,7 @@ function resetRound(): void {
   stage.dataset.swipeUsed = String(hasUsedSwipe);
   stage.dataset.swipeCount = String(swipeCount);
   stage.style.setProperty("--route-progress", "0%");
+  hideMara();
   runnerWorld.reset();
   setText("[data-balance]", "€100.00");
   setText("[data-win]", "€0.00");
@@ -216,6 +276,8 @@ function resetRound(): void {
   setText("[data-moment]", "Glasshouse Heights");
   const assetsLoading = stage.dataset.assetStatus === "loading";
   playButton.disabled = assetsLoading;
+  menuButton.disabled = false;
+  turboButton.disabled = false;
   routeSelect.disabled = false;
   speedSelect.disabled = false;
   requiredElement<HTMLElement>(".nr-play strong", playButton, "Play label missing").textContent = assetsLoading ? "LOADING" : "PLAY";
@@ -235,6 +297,7 @@ function applyBeat(beat: RunnerTimelineBeat, frozen: boolean): void {
   liveStatus.textContent = statusFor(beat.phase);
   if (frozen) runnerWorld.showAt(beat);
   updateRoundValues(beat.phase);
+  showMaraForPhase(beat.phase);
   const feedbackCue = feedbackCueForPhase(beat.phase);
   if (!frozen && feedbackCue) feedback.cue(feedbackCue);
 
@@ -242,6 +305,8 @@ function applyBeat(beat: RunnerTimelineBeat, frozen: boolean): void {
     playing = false;
     stage.dataset.playing = "false";
     playButton.disabled = false;
+    menuButton.disabled = false;
+    turboButton.disabled = false;
     routeSelect.disabled = false;
     speedSelect.disabled = false;
     requiredElement<HTMLElement>(".nr-play strong", playButton, "Play label missing").textContent = "PLAY";
@@ -430,6 +495,7 @@ function recoverRound(): void {
   liveStatus.textContent = `Recovered at ${Math.round(savedSnapshot.state.progress * 100)}%`;
   stage.dataset.recoveryCount = String(runnerWorld.inspect().runnerState.recoveryCount);
   feedback.cue("recovery");
+  showMara({ portrait: "neutral", message: "Still with you. Keep moving." });
 }
 
 function createRunnerWorld(): NightDropRunnerWorld {
@@ -560,6 +626,42 @@ function feedbackCueForPhase(phase: RunnerPhase): NightDropRunnerFeedbackCue | n
   if (phase === "arrival") return "arrival";
   if (phase === "win") return "win";
   return null;
+}
+
+interface MaraMoment {
+  readonly portrait: "neutral" | "warning" | "amused";
+  readonly message: string;
+}
+
+function showMaraForPhase(phase: RunnerPhase): void {
+  const moments: Partial<Record<RunnerPhase, MaraMoment>> = {
+    "route-guidance": { portrait: "neutral", message: "Route locked. Try not to improvise." },
+    turn: { portrait: "neutral", message: "Crossroads. Pick one." },
+    "continuation-open": { portrait: "neutral", message: "Address changed. Keep moving." },
+    clamp: { portrait: "warning", message: "Clamp's awake." },
+    "penthouse-reveal": { portrait: "neutral", message: "Take it upstairs." },
+    win: { portrait: "amused", message: "Against the odds. Nice one." },
+  };
+  const moment = moments[phase];
+  if (moment) showMara(moment);
+}
+
+function showMara(moment: MaraMoment): void {
+  if (maraTimer !== null) window.clearTimeout(maraTimer);
+  maraPortrait.src = `/assets/night-drop/characters/mara/${moment.portrait}.png`;
+  maraMessage.textContent = moment.message;
+  maraCard.dataset.visible = "true";
+  maraCard.setAttribute("aria-hidden", "false");
+  stage.dataset.maraVisible = "true";
+  maraTimer = window.setTimeout(hideMara, 1_800);
+}
+
+function hideMara(): void {
+  if (maraTimer !== null) window.clearTimeout(maraTimer);
+  maraTimer = null;
+  maraCard.dataset.visible = "false";
+  maraCard.setAttribute("aria-hidden", "true");
+  stage.dataset.maraVisible = "false";
 }
 
 function clearTimers(): void {

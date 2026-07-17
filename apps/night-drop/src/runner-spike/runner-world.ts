@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import {
   SpatialRunnerController,
   resolveSpatialBranchDisplacement,
@@ -15,7 +16,10 @@ import {
 } from "@hustle/routerun";
 import type { NightDropRunnerPlan, RunnerTimelineBeat } from "./runner-plan.js";
 import { createNightDropBuilding } from "./night-drop-building-kit.js";
-import { NightDropDashActor } from "./night-drop-dash-actor.js";
+import { installNightDropCityKit } from "./night-drop-city-assets.js";
+import { NightDropCityLife } from "./night-drop-city-life.js";
+import { NightDropClampActor } from "./night-drop-clamp-actor.js";
+import { NightDropDashActor, type NightDropDashMotionFrame } from "./night-drop-dash-actor.js";
 import { resolveNightDropDistrict } from "./night-drop-districts.js";
 import {
   NIGHT_DROP_BRANCH_STREET_HALF_WIDTH,
@@ -27,6 +31,7 @@ import {
 import { NightDropRunnerEffects } from "./night-drop-runner-effects.js";
 import type { NightDropRunnerFeedbackCue } from "./night-drop-runner-feedback.js";
 import { createNightDropStreetModule } from "./night-drop-street-kit.js";
+import { createNightDropPbrMaterial } from "./night-drop-pbr-materials.js";
 import {
   NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
   NightDropRunnerProductionLoader,
@@ -64,6 +69,8 @@ export class NightDropRunnerWorld {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(58, 1, .1, 260);
   private readonly cameraTarget = new THREE.Vector3();
+  private readonly occluderPosition = new THREE.Vector3();
+  private readonly occluderOffset = new THREE.Vector3();
   private readonly route: ComposedSpatialRoute;
   private readonly path: THREE.CatmullRomCurve3;
   private readonly branchStreets: readonly NightDropBranchStreet[];
@@ -77,6 +84,7 @@ export class NightDropRunnerWorld {
   private readonly routeMarkers = new THREE.Group();
   private readonly junctions: THREE.Group;
   private readonly city: THREE.Group;
+  private readonly cityLife: NightDropCityLife;
   private readonly packages: readonly WorldPackage[];
   private readonly obstacles: readonly WorldObstacle[];
   private readonly gate = createContinuationGate();
@@ -84,6 +92,10 @@ export class NightDropRunnerWorld {
   private readonly checkpoint = createCheckpoint();
   private readonly penthouse = createPenthouse();
   private readonly rain: THREE.Points;
+  private readonly sky = createNightDropSky();
+  private readonly runnerKeyLight: THREE.PointLight;
+  private readonly runnerWarmLight: THREE.PointLight;
+  private readonly environmentTexture: THREE.Texture;
   private readonly continuationProgress: number;
   private readonly shortcutProgress: number;
   private readonly checkpointProgress: number;
@@ -98,6 +110,13 @@ export class NightDropRunnerWorld {
   private readonly frameTimes: number[] = [];
   private compactRenderMode = false;
   private visualLaneOffset = 0;
+  private visualSpeedMps = 0;
+  private previousProgress = 0;
+  private previousRunnerAction: NightDropDashMotionFrame["action"] = "idle";
+  private landingAtMs = Number.NEGATIVE_INFINITY;
+  private lastFootstepCueAt = Number.NEGATIVE_INFINITY;
+  private cameraShoulderOffset = 0;
+  private cameraRoll = 0;
   private lastWorldElapsedMs = 0;
   private readonly branchButtons: readonly HTMLButtonElement[];
   private readonly junctionPrompt: HTMLElement | null;
@@ -127,11 +146,14 @@ export class NightDropRunnerWorld {
       ...(deviceMemoryGb ? { deviceMemoryGb } : {}),
     });
     this.rain = createRain(this.renderLod);
+    this.runnerKeyLight = new THREE.PointLight(0xa9efff, this.renderLod === "low" ? 10 : 13, 28, 2);
+    this.runnerWarmLight = new THREE.PointLight(0xffb45f, this.renderLod === "low" ? 6 : 8, 24, 2);
     this.effects = new NightDropRunnerEffects(this.renderLod);
     this.onPresentationCue = options.onPresentationCue;
     this.runnerController = new SpatialRunnerController(this.route);
     this.junctions = createJunctionGeometry(this.path, this.route, this.branchStreets);
     this.city = createCity(this.path, this.route, this.renderLod, this.branchStreets);
+    this.cityLife = new NightDropCityLife(this.path, this.route, this.renderLod);
     this.branchButtons = [...this.stage.querySelectorAll<HTMLButtonElement>("[data-branch]")];
     this.junctionPrompt = this.stage.querySelector<HTMLElement>("[data-junction-prompt]");
     this.junctionWarning = this.stage.querySelector<HTMLElement>("[data-junction-warning]");
@@ -150,11 +172,22 @@ export class NightDropRunnerWorld {
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.48;
+    this.renderer.toneMappingExposure = 1.58;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.scene.background = new THREE.Color(0x030914);
-    this.scene.fog = new THREE.FogExp2(0x050d18, .0095);
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const environment = new RoomEnvironment();
+    this.environmentTexture = pmrem.fromScene(environment, .04).texture;
+    environment.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      object.geometry.dispose();
+      (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) => material.dispose());
+    });
+    pmrem.dispose();
+    this.scene.environment = this.environmentTexture;
+    this.scene.environmentIntensity = .4;
+    this.scene.background = new THREE.Color(0x030711);
+    this.scene.fog = new THREE.FogExp2(0x07121d, .0048);
     this.stage.dataset.renderer = "three";
     this.stage.dataset.routeId = plan.routeId;
     this.stage.dataset.routeLength = String(Math.round(this.route.totalLength));
@@ -168,7 +201,10 @@ export class NightDropRunnerWorld {
     this.obstacles = this.route.obstacles.map((obstacle) => ({ root: createObstacle(obstacle), obstacle }));
 
     this.buildScene();
-    this.assetReadiness = this.configureProductionAssets(options);
+    this.assetReadiness = Promise.all([
+      this.configureProductionAssets(options),
+      this.checkpoint.clamp.ready,
+    ]).then(() => undefined);
     window.addEventListener("resize", this.resize);
     this.resize();
     this.updateWorld(0, true);
@@ -184,6 +220,7 @@ export class NightDropRunnerWorld {
     this.running = true;
     this.elapsedMs = 0;
     this.visualLaneOffset = 0;
+    this.resetMotionState();
     this.lastWorldElapsedMs = 0;
     this.reportedObstacleInteractions = 0;
     this.speed = normalizeSpeed(speed);
@@ -213,6 +250,7 @@ export class NightDropRunnerWorld {
     this.running = false;
     this.elapsedMs = 0;
     this.visualLaneOffset = 0;
+    this.resetMotionState();
     this.lastWorldElapsedMs = 0;
     this.reportedObstacleInteractions = 0;
     this.runnerController.reset();
@@ -273,6 +311,7 @@ export class NightDropRunnerWorld {
     this.disposed = true;
     window.removeEventListener("resize", this.resize);
     this.dashActor.dispose();
+    this.checkpoint.clamp.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     this.scene.traverse((object) => {
@@ -286,6 +325,7 @@ export class NightDropRunnerWorld {
       (material as THREE.Material & { map?: THREE.Texture }).map?.dispose();
       material.dispose();
     });
+    this.environmentTexture.dispose();
     this.renderer.dispose();
   }
 
@@ -332,12 +372,16 @@ export class NightDropRunnerWorld {
     this.stage.dataset.productionEnvironmentAssets = String(options.productionEnvironmentAssets === true);
     this.stage.dataset.dashAssetMode = this.dashActor.inspect().mode;
     this.stage.dataset.environmentAssetMode = options.productionEnvironmentAssets ? "loading" : "curve-safe";
+    this.stage.dataset.cityKitMode = options.productionAssets ? "loading" : "fallback";
+    this.stage.dataset.cityKitBuildings = "0";
     this.stage.dataset.environmentAssetSegments = "0";
     this.stage.dataset.environmentAssetMissingRoles = "0";
     if (!options.productionAssets) return;
     const loader = new NightDropRunnerProductionLoader();
-    const [status] = await Promise.all([
+    const cityKitStartedAt = performance.now();
+    const [status, cityKit] = await Promise.all([
       this.dashActor.loadProduction(loader, manifest.character),
+      installNightDropCityKit(this.city),
       options.productionEnvironmentAssets
         ? this.loadProductionEnvironment(loader, manifest)
         : Promise.resolve(),
@@ -346,6 +390,11 @@ export class NightDropRunnerWorld {
     this.stage.dataset.dashAssetMode = status.mode;
     this.stage.dataset.dashAssetFallback = String(Boolean(status.fallbackReason));
     this.stage.dataset.dashAnimationCount = String(status.availableAnimationRoles.length);
+    this.stage.dataset.cityKitMode = cityKit.mode;
+    this.stage.dataset.cityKitBuildings = String(cityKit.installedBuildings);
+    this.stage.dataset.cityKitTemplates = String(cityKit.loadedTemplates);
+    this.stage.dataset.cityKitFallback = String(Boolean(cityKit.reason));
+    this.stage.dataset.cityKitLoadMs = String(Math.round(performance.now() - cityKitStartedAt));
     this.updateWorld(this.elapsedMs, true);
   }
 
@@ -410,19 +459,22 @@ export class NightDropRunnerWorld {
   }
 
   private buildScene(): void {
-    this.scene.add(new THREE.HemisphereLight(0x7bb7d2, 0x070914, 1.72));
-    const key = new THREE.DirectionalLight(0x9fd9ee, 2.65);
+    this.scene.add(this.sky);
+    this.scene.add(new THREE.HemisphereLight(0x8fbfce, 0x120f16, 1.75));
+    const key = new THREE.DirectionalLight(0xb7dfeb, 2.85);
     key.position.set(-12, 26, 8);
     key.castShadow = true;
-    key.shadow.mapSize.set(512, 512);
+    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.bias = -.00035;
     this.scene.add(key);
 
-    const magentaFill = new THREE.PointLight(0xff2aaf, 9, 30, 2);
+    const magentaFill = new THREE.PointLight(0xff2aaf, 3.2, 38, 2);
     magentaFill.position.set(14, 8, -48);
     this.scene.add(magentaFill);
-    const cyanFill = new THREE.PointLight(0x28eaff, 8, 29, 2);
+    const cyanFill = new THREE.PointLight(0x28eaff, 3.1, 38, 2);
     cyanFill.position.set(-8, 5, -92);
     this.scene.add(cyanFill);
+    this.scene.add(this.runnerKeyLight, this.runnerWarmLight);
 
     const road = createRoad(this.path, this.route);
     freezeStaticTransforms(road);
@@ -430,6 +482,7 @@ export class NightDropRunnerWorld {
     freezeStaticTransforms(this.junctions);
     this.scene.add(road);
     this.scene.add(this.city);
+    this.scene.add(this.cityLife.root);
     this.scene.add(this.junctions);
     this.buildRouteMarkers();
     this.scene.add(this.routeMarkers);
@@ -446,20 +499,53 @@ export class NightDropRunnerWorld {
   }
 
   private buildRouteMarkers(): void {
-    const material = new THREE.MeshBasicMaterial({ color: 0x6cfbff, transparent: true, opacity: .92 });
-    const markerCount = Math.min(72, Math.max(24, Math.round(this.route.totalLength / 7.2)));
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00d9f5,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const haloMaterial = new THREE.MeshBasicMaterial({
+      color: 0x20e8ff,
+      transparent: true,
+      opacity: .42,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const markerCount = Math.min(110, Math.max(36, Math.round(this.route.totalLength / 5.2)));
     for (let index = 1; index < markerCount; index += 1) {
       const progress = index / markerCount;
       const markerCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-.58, .075, -.9),
+        new THREE.Vector3(-1.08, .09, -1.36),
         new THREE.Vector3(0, .075, 0),
-        new THREE.Vector3(.58, .075, -.9),
+        new THREE.Vector3(1.08, .09, -1.36),
       ]);
-      const marker = new THREE.Mesh(new THREE.TubeGeometry(markerCurve, 8, .055, 5, false), material);
+      const marker = new THREE.Group();
+      marker.name = "route-navigation-chevron";
+      marker.add(new THREE.Mesh(new THREE.TubeGeometry(markerCurve, 10, .16, 7, false), material));
+      const halo = new THREE.Mesh(new THREE.CircleGeometry(.72, 20), haloMaterial);
+      halo.name = "route-navigation-halo";
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.set(0, .055, -.58);
+      halo.scale.set(1.9, .82, 1);
+      marker.add(halo);
       marker.userData.progress = progress;
       placeOnSelectedStreet(marker, this.path, this.branchStreets, this.route, {}, progress, 0, 0);
       this.routeMarkers.add(marker);
     }
+  }
+
+  private resetMotionState(): void {
+    this.visualSpeedMps = 0;
+    this.previousProgress = 0;
+    this.previousRunnerAction = "idle";
+    this.landingAtMs = Number.NEGATIVE_INFINITY;
+    this.lastFootstepCueAt = Number.NEGATIVE_INFINITY;
+    this.cameraShoulderOffset = 0;
+    this.cameraRoll = 0;
   }
 
   private readonly tick = (now: number): void => {
@@ -497,6 +583,11 @@ export class NightDropRunnerWorld {
       this.reportedObstacleInteractions = runnerState.obstacleInteractions.length;
     }
     const branchDisplacement = resolveSpatialBranchDisplacement(this.route, runnerState.branchSelections, progress);
+    this.cityLife.update(elapsedMs, progress, Boolean(branchDisplacement.activeBranchId));
+    const cityLifeStatus = this.cityLife.inspect();
+    this.stage.dataset.cityLifeActors = String(cityLifeStatus.actors);
+    this.stage.dataset.cityLifeVisible = String(cityLifeStatus.visibleActors);
+    this.stage.dataset.citySteamColumns = String(cityLifeStatus.steamColumns);
     const branchStreetPose = resolveNightDropBranchStreetPose(this.branchStreets, this.route, runnerState.branchSelections, progress);
     const centrePoint = branchStreetPose?.point ?? this.path.getPointAt(progress);
     const tangent = branchStreetPose?.tangent ?? this.path.getTangentAt(progress).normalize();
@@ -523,21 +614,59 @@ export class NightDropRunnerWorld {
     const jumpHeight = runnerState.action === "jumping" ? Math.sin(Math.PI * actionProgress) * 1.55 : 0;
     const travelTangent = tangent.clone().normalize();
     const travelSide = new THREE.Vector3(-travelTangent.z, 0, travelTangent.x).normalize();
+    const instantSpeedMps = !snapCamera && frameDeltaMs > 0
+      ? Math.min(22, Math.abs(progress - this.previousProgress) * this.route.totalLength / (frameDeltaMs / 1_000) * .46)
+      : moving ? 15 : 0;
+    const speedResponse = 1 - Math.exp(-frameDeltaMs / (instantSpeedMps > this.visualSpeedMps ? 180 : 310));
+    this.visualSpeedMps += ((moving ? instantSpeedMps : 0) - this.visualSpeedMps) * (snapCamera ? 1 : speedResponse);
+    this.previousProgress = progress;
+    if (this.previousRunnerAction === "jumping" && runnerState.action !== "jumping") this.landingAtMs = elapsedMs;
+    this.previousRunnerAction = runnerState.action;
+    const landingAge = elapsedMs - this.landingAtMs;
+    const landingStrength = landingAge >= 0 && landingAge <= 420
+      ? Math.exp(-landingAge / 145) * Math.max(0, Math.sin(landingAge * .034))
+      : 0;
+    const speedEnergy = moving ? Math.max(0, Math.min(1, this.visualSpeedMps / 20)) : 0;
+    const footstepIntervalMs = 345 - speedEnergy * 105;
+    const footstepReady = elapsedMs - this.lastFootstepCueAt >= footstepIntervalMs;
+    if (!snapCamera && moving && footstepReady && !["jumping", "sliding"].includes(runnerState.action)) {
+      this.lastFootstepCueAt = elapsedMs;
+      this.onPresentationCue?.("footstep");
+    }
+    const cameraLookAheadDistance = 7.5 + speedEnergy * 3.6;
+    const aheadProgress = Math.min(.999, progress + cameraLookAheadDistance / this.route.totalLength);
+    const aheadStreetPose = resolveNightDropBranchStreetPose(this.branchStreets, this.route, runnerState.branchSelections, aheadProgress);
+    const aheadTangent = aheadStreetPose?.tangent ?? this.path.getTangentAt(aheadProgress).normalize();
+    const turnStrength = Math.max(-1, Math.min(1, travelTangent.x * aheadTangent.z - travelTangent.z * aheadTangent.x));
     const point = centrePoint.clone()
       .addScaledVector(travelSide, this.visualLaneOffset);
     point.y += branchDisplacement.elevationOffset + jumpHeight;
     const runningBlend = moving ? smoothstep((elapsedMs - phaseAt(this.timeline, "start-running")) / 920) : 0;
-    const stride = moving ? Math.sin(elapsedMs * (.014 + runningBlend * .0035)) * runningBlend : 0;
-    const bob = moving ? Math.abs(Math.sin(elapsedMs * .034)) * .075 * runningBlend : 0;
+    const stridePhase = elapsedMs * (.012 + speedEnergy * .0075);
+    const stride = moving ? Math.sin(stridePhase) * runningBlend : 0;
+    const bob = moving
+      ? (Math.abs(Math.sin(stridePhase * 2)) * .055 + Math.pow(Math.max(0, Math.cos(stridePhase * 2)), 8) * .024) * runningBlend
+      : Math.sin(elapsedMs * .0024) * .012;
     const latestInteraction = runnerState.obstacleInteractions.at(-1);
     const interactionAge = latestInteraction ? elapsedMs - latestInteraction.atMs : Number.POSITIVE_INFINITY;
     const interactionStrength = interactionAge >= 0 && interactionAge <= 620 ? 1 - interactionAge / 620 : 0;
     const hitStrength = latestInteraction?.result === "hit" ? interactionStrength : 0;
     const clearStrength = latestInteraction?.result === "cleared" ? interactionStrength : 0;
+    const shortcutStart = phaseAt(this.timeline, "shortcut");
+    const clampStart = phaseAt(this.timeline, "clamp");
+    const escapeStart = phaseAt(this.timeline, "escape");
+    const penthouseRevealStart = phaseAt(this.timeline, "penthouse-reveal");
+    const winStart = phaseAt(this.timeline, "win");
+    const shortcutStrength = presentationEnvelope(elapsedMs, shortcutStart - 300, clampStart - 120, 340);
+    const dangerStrength = presentationEnvelope(elapsedMs, clampStart - 260, escapeStart + 260, 260);
+    const arrivalFraming = smoothstep((elapsedMs - penthouseRevealStart + 120) / 820);
+    const celebrationStrength = smoothstep((elapsedMs - winStart + 520) / 520);
 
-    this.runner.position.copy(point).add(new THREE.Vector3(0, bob, 0));
+    this.runner.position.copy(point).add(new THREE.Vector3(0, bob - landingStrength * .055, 0));
     this.runner.lookAt(point.clone().add(travelTangent).add(new THREE.Vector3(0, bob, 0)));
     const dodgeLean = runnerState.action === "dodging-left" ? -.22 : runnerState.action === "dodging-right" ? .22 : 0;
+    const turnLean = -turnStrength * (.075 + junctionAnticipation * .085) * runningBlend;
+    this.runner.rotateZ(turnLean + dodgeLean * .22);
     this.dashActor.update({
       frameDeltaMs,
       elapsedMs,
@@ -548,6 +677,9 @@ export class NightDropRunnerWorld {
       hitStrength,
       clearStrength,
       runningBlend,
+      speedEnergy,
+      turnLean,
+      landingStrength,
     });
     this.effects.update({
       position: this.runner.position,
@@ -557,42 +689,56 @@ export class NightDropRunnerWorld {
       runningBlend,
       clearStrength,
       hitStrength,
+      shortcutStrength,
+      dangerStrength,
+      celebrationStrength,
       compact: this.compactRenderMode,
     });
-    this.runner.scale.set(.82 + clearStrength * .035, runnerState.action === "sliding" ? .52 : .82 - hitStrength * .08, .82 + hitStrength * .05);
+    const runnerScale = this.compactRenderMode ? 1.2 : 1.1;
+    this.runner.scale.set(
+      runnerScale + clearStrength * .045,
+      runnerState.action === "sliding" ? .68 : runnerScale - hitStrength * .1,
+      runnerScale + hitStrength * .06,
+    );
 
-    const cameraDistance = (moving ? 8.85 - runningBlend * 1.2 : 8.85) + junctionAnticipation * 1.15 + obstacleAnticipation * .45;
-    const cameraHeight = (moving ? 4.82 - runningBlend * .56 : 4.82) + junctionAnticipation * .52 + obstacleAnticipation * .18;
-    const cameraLookAheadDistance = 9.5;
-    const aheadProgress = Math.min(.999, progress + cameraLookAheadDistance / this.route.totalLength);
-    const aheadStreetPose = resolveNightDropBranchStreetPose(this.branchStreets, this.route, runnerState.branchSelections, aheadProgress);
-    const aheadTangent = aheadStreetPose?.tangent ?? this.path.getTangentAt(aheadProgress).normalize();
-    const turnStrength = Math.max(-1, Math.min(1, travelTangent.x * aheadTangent.z - travelTangent.z * aheadTangent.x));
-    const turnOffset = turnStrength * 1.35;
+    const baseCameraDistance = this.compactRenderMode ? 6.8 : 7.55;
+    const baseCameraHeight = this.compactRenderMode ? 3.68 : 3.96;
+    const cameraDistance = (moving ? baseCameraDistance - speedEnergy * .82 : baseCameraDistance) + junctionAnticipation * 1.2 + obstacleAnticipation * .45 + arrivalFraming * 6.4;
+    const cameraHeight = (moving ? baseCameraHeight - speedEnergy * .4 : baseCameraHeight) + junctionAnticipation * .54 + obstacleAnticipation * .18 + arrivalFraming * 2.15;
+    const shoulderTarget = turnStrength * (1.1 + junctionAnticipation * .75) + arrivalFraming * 2.2;
+    this.cameraShoulderOffset += (shoulderTarget - this.cameraShoulderOffset) * (snapCamera ? 1 : 1 - Math.exp(-frameDeltaMs / 155));
     const desiredCamera = point.clone()
       .addScaledVector(travelTangent, -cameraDistance)
-      .addScaledVector(travelSide, turnOffset)
-      .add(new THREE.Vector3(0, cameraHeight + bob * .35, 0));
+      .addScaledVector(travelSide, this.cameraShoulderOffset)
+      .add(new THREE.Vector3(0, cameraHeight + bob * .28 - landingStrength * .11, 0));
     if (hitStrength > 0) {
       desiredCamera.addScaledVector(travelSide, Math.sin(elapsedMs * .095) * .24 * hitStrength);
       desiredCamera.y += Math.sin(elapsedMs * .12) * .12 * hitStrength;
     }
-    const cameraResponse = 1 - Math.exp(-frameDeltaMs / 112);
+    const cameraResponse = 1 - Math.exp(-frameDeltaMs / (moving ? 96 + (1 - speedEnergy) * 42 : 150));
     if (snapCamera) this.camera.position.copy(desiredCamera);
     else this.camera.position.lerp(desiredCamera, cameraResponse);
-    const lookAtDistance = 5.4 + runningBlend * 1.6 + junctionAnticipation * 3;
-    const lookAt = point.clone().addScaledVector(travelTangent, lookAtDistance).add(new THREE.Vector3(0, 1.15, 0));
-    if (snapCamera) this.cameraTarget.copy(lookAt);
+    const cameraDrifted = this.camera.position.distanceTo(point) > cameraDistance + 3.2;
+    if (cameraDrifted) this.camera.position.copy(desiredCamera);
+    const lookAtDistance = 5.2 + speedEnergy * 2.2 + junctionAnticipation * 3.4;
+    const lookAt = point.clone().addScaledVector(travelTangent, lookAtDistance).add(new THREE.Vector3(0, 1.28 + arrivalFraming * 1.45, 0));
+    if (snapCamera || cameraDrifted) this.cameraTarget.copy(lookAt);
     else this.cameraTarget.lerp(lookAt, 1 - Math.exp(-frameDeltaMs / 92));
     this.camera.lookAt(this.cameraTarget);
-    if (!snapCamera && moving) this.camera.rotateZ(Math.sin(elapsedMs * .017) * .0035);
+    const cameraRollTarget = moving
+      ? -turnStrength * (.018 + junctionAnticipation * .024) - dodgeLean * .055 + Math.sin(stridePhase * 2) * .0025 * speedEnergy
+      : 0;
+    this.cameraRoll += (cameraRollTarget - this.cameraRoll) * (snapCamera ? 1 : 1 - Math.exp(-frameDeltaMs / 120));
+    if (!snapCamera) this.camera.rotateZ(this.cameraRoll + Math.sin(elapsedMs * .12) * .006 * landingStrength);
 
-    this.routeMarkers.visible = elapsedMs >= 650 && elapsedMs < 13_700;
+    this.routeMarkers.visible = elapsedMs < phaseAt(this.timeline, "arrival");
     this.routeMarkers.children.forEach((marker) => {
       const markerProgress = marker.userData.progress as number;
       placeOnSelectedStreet(marker, this.path, this.branchStreets, this.route, runnerState.branchSelections, markerProgress, 0, 0);
       const markerDistance = (markerProgress - progress) * this.route.totalLength;
-      marker.visible = markerDistance > 8 && markerDistance < (this.compactRenderMode ? 86 : 118);
+      marker.visible = markerDistance > 2 && markerDistance < (this.compactRenderMode ? 94 : 126);
+      const routePulse = 1 + Math.sin(elapsedMs * .007 - markerProgress * 34) * .15;
+      marker.scale.setScalar(routePulse);
     });
     this.packages.forEach(({ root, cue, collectedAtMs }) => {
       const difference = collectedAtMs - elapsedMs;
@@ -625,14 +771,12 @@ export class NightDropRunnerWorld {
     if (gateLeft) gateLeft.position.x = -1.55 - gateOpen * 1.65;
     if (gateRight) gateRight.position.x = 1.55 + gateOpen * 1.65;
 
-    const clampStart = phaseAt(this.timeline, "clamp");
-    const escapeStart = phaseAt(this.timeline, "escape");
     const clampActive = elapsedMs >= clampStart - 250 && elapsedMs <= escapeStart + 200;
     this.checkpoint.redLight.intensity = clampActive ? 35 : 8;
-    this.checkpoint.clamp.position.x = elapsedMs > escapeStart - 100 ? 2.05 + smoothstep((elapsedMs - escapeStart + 100) / 500) * 3.8 : 2.05;
-    this.checkpoint.clamp.rotation.z = clampActive ? Math.sin(elapsedMs * .012) * .02 : 0;
+    const clampEscaped = elapsedMs > escapeStart + 120;
+    this.checkpoint.clamp.root.position.x = elapsedMs > escapeStart - 100 ? 2.05 + smoothstep((elapsedMs - escapeStart + 100) / 500) * 3.8 : 2.05;
+    this.checkpoint.clamp.update(elapsedMs, clampActive, clampEscaped);
 
-    const shortcutStart = phaseAt(this.timeline, "shortcut");
     const shortcutActive = elapsedMs >= shortcutStart - 300 && elapsedMs <= clampStart - 100;
     this.shortcut.traverse((object) => {
       if (object instanceof THREE.PointLight) object.intensity = shortcutActive ? 28 : 10;
@@ -645,6 +789,13 @@ export class NightDropRunnerWorld {
     }
     positions.needsUpdate = true;
     this.rain.position.set(point.x, point.y, point.z);
+    this.sky.position.set(point.x, point.y, point.z);
+    this.runnerKeyLight.position.copy(point).addScaledVector(travelTangent, -3.2);
+    this.runnerKeyLight.position.y += 5.4;
+    this.runnerWarmLight.position.copy(point)
+      .addScaledVector(travelTangent, 5.5)
+      .addScaledVector(travelSide, 5.8);
+    this.runnerWarmLight.position.y += 3.4;
 
     const routeWindow = resolveSpatialRouteWindow(this.route, progress, this.compactRenderMode
       ? { distanceBehind: 24, distanceAhead: 92 }
@@ -659,18 +810,64 @@ export class NightDropRunnerWorld {
         && object.userData.productionReplaced !== true
         && selectedBranchCity;
     });
+    const cameraSafeRadius = this.compactRenderMode ? 10.5 : 12.5;
+    const cameraRunnerX = point.x - this.camera.position.x;
+    const cameraRunnerZ = point.z - this.camera.position.z;
+    const cameraRunnerLengthSquared = cameraRunnerX * cameraRunnerX + cameraRunnerZ * cameraRunnerZ;
+    this.city.traverse((object) => {
+      if (object.userData.cameraOccluder !== true) return;
+      object.getWorldPosition(this.occluderPosition);
+      const streamedVisible = object.parent === this.city ? object.visible : object.parent?.visible !== false;
+      const objectRadius = Number(object.userData.cameraClearanceRadius ?? 0);
+      const objectFromCameraX = this.occluderPosition.x - this.camera.position.x;
+      const objectFromCameraZ = this.occluderPosition.z - this.camera.position.z;
+      const projection = cameraRunnerLengthSquared > 0
+        ? (objectFromCameraX * cameraRunnerX + objectFromCameraZ * cameraRunnerZ) / cameraRunnerLengthSquared
+        : 0;
+      const closestX = this.camera.position.x + cameraRunnerX * THREE.MathUtils.clamp(projection, 0, 1);
+      const closestZ = this.camera.position.z + cameraRunnerZ * THREE.MathUtils.clamp(projection, 0, 1);
+      const lineClearance = objectRadius + (this.compactRenderMode ? 2.2 : 2.8);
+      const blocksRunner = projection > 0 && projection < 1
+        && Math.hypot(this.occluderPosition.x - closestX, this.occluderPosition.z - closestZ) < lineClearance;
+      object.visible = streamedVisible
+        && this.occluderPosition.distanceTo(this.camera.position) > cameraSafeRadius + objectRadius
+        && !blocksRunner;
+    });
     this.junctions.children.forEach((object) => {
       const segmentId = String(object.userData.segmentId ?? "");
       object.visible = activeSegments.has(segmentId)
         || object.userData.junctionId === decision?.id;
     });
+    let visibleAmbientTraffic = 0;
+    this.junctions.traverse((object) => {
+      if (object.userData.dynamicPresentation !== "ambient-traffic") return;
+      const origin = object.userData.trafficOrigin as readonly [number, number, number];
+      const direction = object.userData.trafficDirection as readonly [number, number, number];
+      const phase = Number(object.userData.trafficPhase ?? 0);
+      const travel = ((elapsedMs * .0038 + phase) % 56 + 56) % 56 - 28;
+      object.position.fromArray(origin).addScaledVector(this.occluderOffset.fromArray(direction), travel);
+      object.visible = !decision && (Math.abs(travel) > 7.5 || junctionDistance > 30);
+      object.updateMatrix();
+      if (object.visible && object.parent?.visible !== false) visibleAmbientTraffic += 1;
+    });
     this.stage.dataset.activeSegments = routeWindow.activeSegmentIds.join(",");
     this.stage.dataset.lane = String(runnerState.lane);
     this.stage.dataset.visualLaneOffset = this.visualLaneOffset.toFixed(3);
     this.stage.dataset.runningBlend = runningBlend.toFixed(3);
+    this.stage.dataset.runnerSpeedMps = this.visualSpeedMps.toFixed(2);
+    this.stage.dataset.runnerSpeedEnergy = speedEnergy.toFixed(3);
+    this.stage.dataset.turnLean = turnLean.toFixed(4);
+    this.stage.dataset.landingStrength = landingStrength.toFixed(3);
+    this.stage.dataset.cameraRoll = this.cameraRoll.toFixed(4);
+    this.stage.dataset.shortcutStrength = shortcutStrength.toFixed(3);
+    this.stage.dataset.dangerStrength = dangerStrength.toFixed(3);
+    this.stage.dataset.celebrationStrength = celebrationStrength.toFixed(3);
+    this.stage.dataset.cameraRunnerDistance = this.camera.position.distanceTo(point).toFixed(3);
+    this.stage.dataset.cameraDriftCorrected = String(cameraDrifted);
     this.stage.dataset.runnerAction = runnerState.action;
     this.stage.dataset.activeBranch = branchDisplacement.activeBranchId ?? "";
     this.stage.dataset.branchAlternative = branchDisplacement.alternativeId ?? "";
+    this.stage.dataset.ambientTrafficVisible = String(visibleAmbientTraffic);
     const junctionInRange = Boolean(nextJunction && !decision && junctionDistance <= junctionWarningDistance);
     const obstacleInRange = Boolean(nextObstacle && !decision && obstacleDistance <= nextObstacle.reactionLeadDistance);
     const showJunctionApproach = junctionInRange && (!obstacleInRange || junctionDistance + 8 < obstacleDistance);
@@ -702,11 +899,25 @@ export class NightDropRunnerWorld {
         : "";
     }
     this.updateJunctionDecision(decision, runnerState.branchSelections, progress, !snapCamera);
+    this.junctions.traverse((object) => {
+      if (object.userData.junctionDirectionSign !== true) return;
+      object.getWorldPosition(this.occluderPosition);
+      const forwardDistance = this.occluderOffset
+        .copy(this.occluderPosition)
+        .sub(this.camera.position)
+        .dot(travelTangent);
+      object.visible = Boolean(
+        decision
+        && object.userData.branchId === decision.id
+        && forwardDistance > 5
+        && forwardDistance < 36,
+      );
+    });
 
     const currentSegmentId = segmentAtProgress(this.route, progress);
     const currentSegmentKind = this.route.segments.find(({ id }) => id === currentSegmentId)?.kind;
-    const baseFov = 52 + runningBlend * 6;
-    const targetFov = (decision ? 68 : junctionAnticipation > 0 ? baseFov + junctionAnticipation * 8 : shortcutActive ? 66 : clampActive ? 61 : elapsedMs >= phaseAt(this.timeline, "penthouse-reveal") ? 54 : baseFov)
+    const baseFov = 55 + speedEnergy * 5.5;
+    const targetFov = (decision ? 68 : junctionAnticipation > 0 ? baseFov + junctionAnticipation * 8 : shortcutActive ? 66 : clampActive ? 61 : arrivalFraming > 0 ? 58 : baseFov)
       + obstacleAnticipation * 3 + clearStrength * 2 - hitStrength * 1.5
       + (currentSegmentKind === "alley" ? 7 : 0);
     this.camera.fov += (targetFov - this.camera.fov) * (snapCamera ? 1 : .08);
@@ -726,8 +937,10 @@ export class NightDropRunnerWorld {
     const width = Math.max(1, Math.round(bounds.width));
     const height = Math.max(1, Math.round(bounds.height));
     this.compactRenderMode = width <= 600;
-    const pixelRatioCap = width <= 480 ? 1.2 : width <= 900 ? 1.6 : 2;
-    const dynamicShadows = window.innerWidth > 900;
+    const pixelRatioCap = width <= 480 ? 1.15 : width <= 900 ? 1.35 : 1.7;
+    const dynamicShadows = width > 700
+      && window.innerWidth > 1_400
+      && (window.devicePixelRatio || 1) <= 1.25;
     this.renderer.setPixelRatio(Math.min(pixelRatioCap, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = dynamicShadows;
     this.renderer.setSize(width, height, false);
@@ -815,10 +1028,27 @@ function createRoutePath(route: ComposedSpatialRoute): THREE.CatmullRomCurve3 {
 
 function createRoad(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): THREE.Group {
   const group = new THREE.Group();
-  const road = createVariableWidthRibbon(path, route, 0, .02, new THREE.MeshStandardMaterial({ color: 0x101c2b, roughness: .24, metalness: .86 }));
+  const road = createVariableWidthRibbon(path, route, 0, .02, createNightDropPbrMaterial("nd.material.wet-asphalt", {
+    repeat: [2, Math.max(8, route.totalLength / 8)],
+    color: 0xb9c8d1,
+    roughness: .42,
+    metalness: .34,
+    emissive: 0x071821,
+    emissiveIntensity: .18,
+    normalScale: 1.22,
+  }));
+  road.name = "wet-asphalt-route";
   road.receiveShadow = true;
   group.add(road);
-  group.add(createVariableWidthRibbon(path, route, 1.6, -.02, new THREE.MeshStandardMaterial({ color: 0x1a2431, roughness: .7, metalness: .22 })));
+  const shoulder = createVariableWidthRibbon(path, route, 1.6, -.02, createNightDropPbrMaterial("nd.material.city-concrete", {
+    repeat: [2, Math.max(6, route.totalLength / 12)],
+    color: 0x687277,
+    roughness: .78,
+    metalness: .06,
+    normalScale: .75,
+  }));
+  shoulder.name = "route-concrete-shoulder";
+  group.add(shoulder);
 
   const leftPoints: THREE.Vector3[] = [];
   const rightPoints: THREE.Vector3[] = [];
@@ -835,9 +1065,20 @@ function createRoad(path: THREE.CatmullRomCurve3, route: ComposedSpatialRoute): 
     leftPoints.push(left);
     rightPoints.push(right);
   }
-  const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x25eaff, transparent: true, opacity: .72 });
+  const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xa6b7bd, transparent: true, opacity: .58 });
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftPoints), edgeMaterial));
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightPoints), edgeMaterial));
+  const centrePoints = Array.from({ length: 161 }, (_, index) => {
+    const point = path.getPointAt(index / 160);
+    point.y += .085;
+    return point;
+  });
+  const centreLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(centrePoints),
+    new THREE.LineDashedMaterial({ color: 0xe8e2c9, transparent: true, opacity: .18, dashSize: 2.6, gapSize: 3.8 }),
+  );
+  centreLine.computeLineDistances();
+  group.add(centreLine);
   return group;
 }
 
@@ -850,6 +1091,7 @@ function createVariableWidthRibbon(
 ): THREE.Mesh {
   const vertices: number[] = [];
   const indices: number[] = [];
+  const uvs: number[] = [];
   const segments = 180;
   for (let index = 0; index <= segments; index += 1) {
     const progress = index / segments;
@@ -862,6 +1104,7 @@ function createVariableWidthRibbon(
     left.y += y;
     right.y += y;
     vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    uvs.push(0, progress, 1, progress);
     if (index < segments) {
       const base = index * 2;
       indices.push(base, base + 2, base + 1, base + 2, base + 3, base + 1);
@@ -869,6 +1112,7 @@ function createVariableWidthRibbon(
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return new THREE.Mesh(geometry, material);
@@ -884,6 +1128,7 @@ function routeWidthAtProgress(route: ComposedSpatialRoute, progress: number): nu
 function createRibbon(path: THREE.Curve<THREE.Vector3>, halfWidth: number, y: number, material: THREE.Material): THREE.Mesh {
   const vertices: number[] = [];
   const indices: number[] = [];
+  const uvs: number[] = [];
   const segments = 150;
   for (let index = 0; index <= segments; index += 1) {
     const progress = index / segments;
@@ -895,6 +1140,7 @@ function createRibbon(path: THREE.Curve<THREE.Vector3>, halfWidth: number, y: nu
     left.y += y;
     right.y += y;
     vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    uvs.push(0, progress, 1, progress);
     if (index < segments) {
       const base = index * 2;
       indices.push(base, base + 2, base + 1, base + 2, base + 3, base + 1);
@@ -902,6 +1148,7 @@ function createRibbon(path: THREE.Curve<THREE.Vector3>, halfWidth: number, y: nu
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return new THREE.Mesh(geometry, material);
@@ -915,7 +1162,7 @@ function createCity(
 ): THREE.Group {
   const city = new THREE.Group();
   const branchClearancePoints = sampleStreetPaths(branchStreets.filter(({ direction }) => direction !== "straight"), 32);
-  const buildingCount = Math.min(52, Math.max(28, Math.round(route.totalLength / 22)));
+  const buildingCount = Math.min(60, Math.max(32, Math.round(route.totalLength / 17)));
   for (let index = 0; index < buildingCount; index += 1) {
     const progress = .025 + (index / Math.max(1, buildingCount - 1)) * .95;
     const insideJunctionClearance = route.branches.some((junction) => Math.abs(progress - junction.entryProgress) * route.totalLength < 24);
@@ -928,17 +1175,17 @@ function createCity(
     ([-1, 1] as const).forEach((side, sideIndex) => {
       const width = 4.5 + seeded(index * 11 + sideIndex) * 3;
       const depth = 4 + seeded(index * 19 + sideIndex) * 3.2;
-      const height = 7.5 + seeded(index * 29 + sideIndex) * 11.5;
+      const height = 7.8 + seeded(index * 29 + sideIndex) * 14.2;
       const district = resolveNightDropDistrict(progress, segmentKind);
       const accent = district.primaryAccent;
       const label = (index + sideIndex) % 4 === 0
         ? CITY_LABELS[(index + sideIndex) % CITY_LABELS.length]
         : undefined;
-      const facadeEdge = segmentKind === "alley" ? 6.3 : 11.6;
+      const facadeEdge = segmentKind === "alley" ? 6.3 : 8.45;
       const buildingPosition = point.clone().addScaledVector(sideVector, side * (facadeEdge + depth / 2));
       if (isNearStreetNetwork(buildingPosition, branchClearancePoints, depth / 2 + 7.4)) return;
       const building = lod === "low"
-        ? createJunctionBuilding(width, height, depth, accent, false)
+        ? createJunctionBuilding(width, height, depth, accent, false, index * 2 + sideIndex)
         : createNightDropBuilding({
             index,
             sideIndex,
@@ -958,7 +1205,7 @@ function createCity(
 
     if (index % 3 === 0) {
       ([-1, 1] as const).forEach((side) => {
-        const lamp = createStreetLamp(accentFor(progress));
+        const lamp = createStreetLamp(index % 4 === 0 ? accentFor(progress) : 0xffd2a1);
         const lampOffset = segmentKind === "alley"
           ? (route.segments.find(({ id }) => id === segmentId)?.width ?? 3.4) + 1.15
           : 6.65;
@@ -1019,7 +1266,7 @@ function addBranchStreetBuildings(
         const width = 4.6 + seeded(seed * 11) * 2.3;
         const depth = 4.2 + seeded(seed * 17) * 2.2;
         const height = 7.8 + seeded(seed * 23) * 9.5;
-        const facadeEdge = segmentKind === "alley" ? 6 : 10.5;
+        const facadeEdge = segmentKind === "alley" ? 6 : 8.15;
         const position = point.clone().addScaledVector(sideVector, side * (facadeEdge + depth / 2));
         if (isNearStreetNetwork(position, competingStreetClearancePoints, depth / 2 + 7.2)) return;
         const building = lod === "low"
@@ -1224,15 +1471,15 @@ function createAlleyFacadeStrip(
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  const accent = side < 0 ? 0x176a78 : 0x641d53;
+  const accent = side < 0 ? 0x0b3038 : 0x2d1226;
   const facade = new THREE.Mesh(
     geometry,
     new THREE.MeshStandardMaterial({
-      color: 0x203541,
+      color: 0x18232a,
       emissive: accent,
-      emissiveIntensity: .38,
-      roughness: .68,
-      metalness: .28,
+      emissiveIntensity: .07,
+      roughness: .86,
+      metalness: .12,
       side: THREE.DoubleSide,
     }),
   );
@@ -1244,12 +1491,13 @@ function createAlleyFacadeStrip(
     const roadPoint = path.getPointAt(progress);
     const tangent = path.getTangentAt(progress).normalize();
     const sideVector = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    const warmWindow = windowIndex % 3 !== 1;
     const window = new THREE.Mesh(
       new THREE.PlaneGeometry(1.55, .82),
       new THREE.MeshBasicMaterial({
-        color: side < 0 ? 0x62edff : 0xff72d3,
+        color: warmWindow ? 0xf1c67a : 0x86c7dc,
         transparent: true,
-        opacity: windowIndex % 3 === 0 ? .68 : .42,
+        opacity: windowIndex % 3 === 0 ? .52 : .3,
         side: THREE.DoubleSide,
       }),
     );
@@ -1257,6 +1505,16 @@ function createAlleyFacadeStrip(
     window.position.y += 2.1 + (windowIndex % 2) * 2.15;
     window.lookAt(roadPoint.clone().setY(window.position.y));
     root.add(window);
+
+    const pier = new THREE.Mesh(
+      new THREE.BoxGeometry(.34, 7.5, .34),
+      new THREE.MeshStandardMaterial({ color: 0x2c363c, roughness: .9, metalness: .08 }),
+    );
+    pier.position.copy(roadPoint).addScaledVector(sideVector, side * (facadeOffset - .18));
+    pier.position.y += 3.75;
+    pier.lookAt(roadPoint.clone().setY(pier.position.y));
+    pier.castShadow = true;
+    root.add(pier);
   });
 
   [2.25, 4.8, 7].forEach((height, bandIndex) => {
@@ -1264,9 +1522,9 @@ function createAlleyFacadeStrip(
     const band = new THREE.Line(
       bandGeometry,
       new THREE.LineDashedMaterial({
-        color: bandIndex === 1 ? (side < 0 ? 0x5defff : 0xff67cf) : 0x466776,
+        color: bandIndex === 1 ? 0x71858c : 0x45545a,
         transparent: true,
-        opacity: bandIndex === 1 ? .76 : .42,
+        opacity: bandIndex === 1 ? .46 : .28,
         dashSize: bandIndex === 1 ? 1.1 : 2.2,
         gapSize: bandIndex === 1 ? .85 : 1.5,
       }),
@@ -1311,6 +1569,7 @@ function createJunctionArchitecture(
       placement.depth,
       accent,
       placement.blocked,
+      junctionIndex * 10 + placementIndex,
     );
     building.position.copy(point)
       .addScaledVector(tangent, placement.forward)
@@ -1330,18 +1589,29 @@ function createJunctionBuilding(
   depth: number,
   accent: number,
   blocked: boolean,
+  kitIndex = 0,
 ): THREE.Group {
   const root = new THREE.Group();
+  root.userData.cameraOccluder = true;
+  root.userData.cameraClearanceRadius = Math.hypot(width, depth) * .5;
+  root.userData.productionKit = "night-drop-city-v2";
+  root.userData.archetype = blocked ? "service-block" : (["glasshouse", "night-market", "stacked-flats"] as const)[Math.abs(kitIndex) % 3];
+  root.userData.cityVariant = Math.abs(kitIndex) % 2 === 0 ? "a" : "b";
+  root.userData.desiredWidth = width;
+  root.userData.desiredDepth = depth;
+  root.userData.desiredHeight = height;
   const shell = new THREE.Mesh(
     new THREE.BoxGeometry(width, height, depth),
-    new THREE.MeshStandardMaterial({
-      color: blocked ? 0x170b12 : 0x08131d,
+    createNightDropPbrMaterial("nd.material.city-concrete", {
+      repeat: [2, Math.max(2, height / 4)],
+      color: blocked ? 0x80616b : 0x8a9ba6,
       roughness: .64,
       metalness: .26,
       emissive: accent,
       emissiveIntensity: blocked ? .038 : .012,
     }),
   );
+  shell.name = "junction-building-shell";
   shell.position.y = height / 2;
   shell.castShadow = true;
   shell.receiveShadow = true;
@@ -1349,9 +1619,17 @@ function createJunctionBuilding(
 
   const pavement = new THREE.Mesh(
     new THREE.BoxGeometry(width + .7, .14, 2.2),
-    new THREE.MeshStandardMaterial({ color: 0x1d2830, emissive: 0x07131a, emissiveIntensity: .015, roughness: .82, metalness: .12 }),
+    createNightDropPbrMaterial("nd.material.city-concrete", {
+      repeat: [2, 1],
+      color: 0x89949c,
+      emissive: 0x07131a,
+      emissiveIntensity: .04,
+      roughness: .82,
+      metalness: .12,
+    }),
   );
   pavement.position.set(0, .07, depth / 2 + 1.1);
+  pavement.name = "junction-pavement";
   pavement.receiveShadow = true;
   root.add(pavement);
 
@@ -1377,12 +1655,18 @@ function createJunctionBuilding(
 
   const roof = new THREE.Mesh(
     new THREE.BoxGeometry(width + .7, .38, depth + .7),
-    new THREE.MeshStandardMaterial({ color: 0x243747, roughness: .38, metalness: .68 }),
+    createNightDropPbrMaterial("nd.material.rooftop-metal", {
+      repeat: [2, 2],
+      color: 0x8798a5,
+      roughness: .48,
+      metalness: .64,
+    }),
   );
   roof.position.y = height + .15;
   root.add(roof);
 
   const sign = createNeonSign(blocked ? "NO THROUGH ROAD" : CITY_LABELS[Math.round(width + height) % CITY_LABELS.length]!, accent);
+  sign.name = "junction-sign";
   sign.position.set(0, height * .79, depth / 2 + .15);
   sign.scale.setScalar(blocked ? .82 : .64);
   root.add(sign);
@@ -1444,7 +1728,12 @@ function createJunctionGeometry(
       crossStreetPath,
       5.8,
       .006,
-      new THREE.MeshStandardMaterial({ color: 0x263541, roughness: .74, metalness: .2 }),
+      createNightDropPbrMaterial("nd.material.city-concrete", {
+        repeat: [2, 7],
+        color: 0x89959d,
+        roughness: .8,
+        metalness: .08,
+      }),
     );
     crossStreetShoulder.receiveShadow = true;
     junctionGroup.add(crossStreetShoulder);
@@ -1452,11 +1741,18 @@ function createJunctionGeometry(
       crossStreetPath,
       4.35,
       .024,
-      new THREE.MeshStandardMaterial({ color: 0x355f70, roughness: .28, metalness: .72, emissive: 0x0f5260, emissiveIntensity: .45 }),
+      createNightDropPbrMaterial("nd.material.wet-asphalt", {
+        repeat: [2, 8],
+        color: 0xc2d1d9,
+        roughness: .5,
+        metalness: .28,
+        emissive: 0x0a2830,
+        emissiveIntensity: .22,
+      }),
     );
     crossStreet.receiveShadow = true;
     junctionGroup.add(crossStreet);
-    const curbMaterial = new THREE.LineBasicMaterial({ color: 0x40f8ff, transparent: true, opacity: .42 });
+    const curbMaterial = new THREE.LineBasicMaterial({ color: 0xaebbc0, transparent: true, opacity: .52 });
     ([-1, 1] as const).forEach((edge) => {
       const curbPoints = [
         entryPoint.clone().addScaledVector(entrySide, -30).addScaledVector(entryTangent, edge * 4.35),
@@ -1474,10 +1770,26 @@ function createJunctionGeometry(
       junctionGroup.add(marking);
     }
 
+    const ambientTraffic = createAmbientTrafficCar(branchDefinition.entryDistance);
+    ambientTraffic.userData.dynamicPresentation = "ambient-traffic";
+    ambientTraffic.userData.trafficOrigin = entryPoint.toArray();
+    ambientTraffic.userData.trafficDirection = entrySide.toArray();
+    ambientTraffic.userData.trafficPhase = seeded(branchDefinition.entryDistance * 1.73) * 56;
+    ambientTraffic.position.copy(entryPoint).addScaledVector(entrySide, -24);
+    ambientTraffic.lookAt(entryPoint.clone().add(entrySide));
+    junctionGroup.add(ambientTraffic);
+
     if (branchDefinition.junctionKind === "t-junction") {
       const deadEndApron = new THREE.Mesh(
         new THREE.BoxGeometry(10.4, .09, 13.5),
-        new THREE.MeshStandardMaterial({ color: 0x111923, roughness: .84, metalness: .12, emissive: 0x260611, emissiveIntensity: .16 }),
+        createNightDropPbrMaterial("nd.material.wet-asphalt", {
+          repeat: [3, 4],
+          color: 0x8f969b,
+          roughness: .78,
+          metalness: .12,
+          emissive: 0x260611,
+          emissiveIntensity: .16,
+        }),
       );
       deadEndApron.position.copy(entryPoint).addScaledVector(entryTangent, 7.7);
       deadEndApron.position.y += .07;
@@ -1511,10 +1823,11 @@ function createJunctionGeometry(
       if (!branchStreet) return;
       const branchPath = branchStreet.path;
       if (alternative.direction !== "straight") {
-        const shoulderMaterial = new THREE.MeshStandardMaterial({
-          color: 0x101923,
+        const shoulderMaterial = createNightDropPbrMaterial("nd.material.city-concrete", {
+          repeat: [2, Math.max(4, branchPath.getLength() / 10)],
+          color: 0x879199,
           roughness: .72,
-          metalness: .22,
+          metalness: .12,
           transparent: true,
           opacity: .98,
         });
@@ -1528,12 +1841,13 @@ function createJunctionGeometry(
         tagJunctionMesh(shoulder, branchDefinition.id, alternative.id, .98, 0);
         junctionGroup.add(shoulder);
 
-        const roadMaterial = new THREE.MeshStandardMaterial({
-          color: 0x254758,
-          roughness: .25,
-          metalness: .82,
+        const roadMaterial = createNightDropPbrMaterial("nd.material.wet-asphalt", {
+          repeat: [2, Math.max(4, branchPath.getLength() / 8)],
+          color: 0xb7c8d0,
+          roughness: .5,
+          metalness: .3,
           emissive: 0x082b35,
-          emissiveIntensity: .28,
+          emissiveIntensity: .2,
           transparent: true,
           opacity: .96,
         });
@@ -1542,7 +1856,7 @@ function createJunctionGeometry(
         tagJunctionMesh(road, branchDefinition.id, alternative.id, .96, .28);
         junctionGroup.add(road);
 
-        const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x40f8ff, transparent: true, opacity: .48 });
+        const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xa8b7bd, transparent: true, opacity: .48 });
         const leftEdge = createStreetEdgeLine(branchPath, -NIGHT_DROP_BRANCH_STREET_HALF_WIDTH, edgeMaterial);
         const rightEdge = createStreetEdgeLine(branchPath, NIGHT_DROP_BRANCH_STREET_HALF_WIDTH, edgeMaterial);
         const centreLine = createStreetCentreLine(branchPath);
@@ -1564,11 +1878,12 @@ function createJunctionGeometry(
       const directionOffset = alternative.direction === "left" ? -3.2 : alternative.direction === "right" ? 3.2 : 0;
       const sign = createNeonSign(directionLabel(alternative.direction).toUpperCase(), alternative.direction === "straight" ? 0xb7fdff : 0x40f8ff);
       sign.position.copy(entryPoint)
-        .addScaledVector(entryTangent, -2.2)
-        .addScaledVector(entrySide, directionOffset);
-      sign.position.y += 2.65;
+        .addScaledVector(entryTangent, 5.5)
+        .addScaledVector(entrySide, directionOffset * 1.2);
+      sign.position.y += 1.4;
       sign.lookAt(entryPoint.clone().addScaledVector(entryTangent, -8).setY(sign.position.y));
-      sign.scale.setScalar(.76);
+      sign.scale.setScalar(.42);
+      sign.userData.junctionDirectionSign = true;
       tagJunctionMesh(sign, branchDefinition.id, alternative.id, 1, 0);
       junctionGroup.add(sign);
     });
@@ -1602,7 +1917,7 @@ function createStreetCentreLine(path: THREE.Curve<THREE.Vector3>): THREE.Line {
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
   const line = new THREE.Line(
     geometry,
-    new THREE.LineDashedMaterial({ color: 0xb7fdff, transparent: true, opacity: .52, dashSize: 1.4, gapSize: 2.1 }),
+    new THREE.LineDashedMaterial({ color: 0xe8e2c9, transparent: true, opacity: .42, dashSize: 1.4, gapSize: 2.1 }),
   );
   line.computeLineDistances();
   return line;
@@ -1630,16 +1945,69 @@ function directionLabel(direction: "left" | "straight" | "right"): string {
 function createPackage(progress: number, lane: number, premium: boolean, path: THREE.CatmullRomCurve3): THREE.Group {
   const group = new THREE.Group();
   const gold = new THREE.MeshStandardMaterial({ color: premium ? 0xfff16a : 0xffd21c, roughness: .24, metalness: .55, emissive: 0xffb900, emissiveIntensity: premium ? 1.5 : .72 });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(.7, .55, .7), gold);
-  box.position.y = .55;
-  box.rotation.y = Math.PI / 4;
+  const darkGold = new THREE.MeshStandardMaterial({ color: 0x8b5900, roughness: .48, metalness: .2, emissive: 0x3a2000, emissiveIntensity: .12 });
+  const labelMaterial = new THREE.MeshBasicMaterial({ color: 0xfff5c2 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(.72, .5, .64), gold);
+  box.position.y = .48;
   box.castShadow = true;
-  group.add(box);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(.76, .12, .68), darkGold);
+  lid.position.y = .78;
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(.13, .08, .7), darkGold);
+  strap.position.y = .81;
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(.28, .19), labelMaterial);
+  label.position.set(0, .52, .326);
+  const contact = new THREE.Mesh(
+    new THREE.CircleGeometry(.78, 24),
+    new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: .2, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.y = .035;
+  contact.scale.set(1.55, .72, 1);
+  group.add(box, lid, strap, label, contact);
   const light = new THREE.PointLight(0xffc928, premium ? 22 : 11, 7, 2);
   light.position.y = .8;
   group.add(light);
   placeAt(group, path, progress, lane * 2.8, 0);
   return group;
+}
+
+function createAmbientTrafficCar(seed: number): THREE.Group {
+  const root = new THREE.Group();
+  root.name = "ambient-cross-traffic";
+  const bodyColor = [0x33464e, 0x4a383f, 0x5a5338][Math.floor(seeded(seed * 2.7) * 3)]!;
+  const body = new THREE.MeshPhysicalMaterial({
+    color: bodyColor,
+    roughness: .4,
+    metalness: .48,
+    clearcoat: .35,
+    clearcoatRoughness: .28,
+  });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x10252d, roughness: .16, metalness: .28, clearcoat: .5 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x090a0b, roughness: .96 });
+  const lamp = new THREE.MeshStandardMaterial({ color: 0xdbe6d8, emissive: 0xffd895, emissiveIntensity: .72, roughness: .3 });
+  const tail = new THREE.MeshStandardMaterial({ color: 0x8d172b, emissive: 0xff274d, emissiveIntensity: .55, roughness: .34 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.72, .54, 3.35), body);
+  base.position.y = .52;
+  base.castShadow = true;
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.48, .6, 1.72), glass);
+  cabin.position.set(0, .99, .18);
+  cabin.castShadow = true;
+  root.add(base, cabin);
+  ([-.76, .76] as const).forEach((x) => {
+    ([-1.05, 1.06] as const).forEach((z) => {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.27, .27, .18, 12), tyre);
+      wheel.position.set(x, .29, z);
+      wheel.rotation.z = Math.PI / 2;
+      root.add(wheel);
+    });
+    const headlight = new THREE.Mesh(new THREE.BoxGeometry(.32, .18, .07), lamp);
+    headlight.position.set(x * .62, .54, 1.71);
+    const taillight = new THREE.Mesh(new THREE.BoxGeometry(.3, .16, .07), tail);
+    taillight.position.set(x * .62, .54, -1.71);
+    root.add(headlight, taillight);
+  });
+  root.scale.setScalar(.86);
+  return root;
 }
 
 function createObstacle(obstacle: ResolvedSpatialRouteObstacle): THREE.Group {
@@ -1652,13 +2020,19 @@ function createObstacle(obstacle: ResolvedSpatialRouteObstacle): THREE.Group {
     metalness: .66,
   });
   const danger = new THREE.MeshStandardMaterial({
-    color: 0x8b1934,
+    color: 0x672634,
     emissive: 0xff315e,
-    emissiveIntensity: .74,
-    roughness: .4,
-    metalness: .48,
+    emissiveIntensity: .22,
+    roughness: .52,
+    metalness: .34,
   });
   const dark = new THREE.MeshStandardMaterial({ color: 0x080d14, roughness: .66, metalness: .42 });
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x777b79, roughness: .9, metalness: .02 });
+  const warningWhite = new THREE.MeshStandardMaterial({ color: 0xe4dfcf, roughness: .7, metalness: .08 });
+  const warningOrange = new THREE.MeshStandardMaterial({ color: 0xc85a28, emissive: 0x6e1d08, emissiveIntensity: .16, roughness: .62, metalness: .14 });
+  const vehicleBody = new THREE.MeshPhysicalMaterial({ color: 0x263944, roughness: .34, metalness: .58, clearcoat: .45, clearcoatRoughness: .22 });
+  const vehicleGlass = new THREE.MeshPhysicalMaterial({ color: 0x0b202b, roughness: .14, metalness: .38, clearcoat: .7, clearcoatRoughness: .12 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x090a0c, roughness: .96, metalness: .02 });
   const gold = new THREE.MeshStandardMaterial({
     color: 0xffc928,
     emissive: 0xffa400,
@@ -1677,11 +2051,23 @@ function createObstacle(obstacle: ResolvedSpatialRouteObstacle): THREE.Group {
     mesh.receiveShadow = true;
     return mesh;
   };
+  const makeWheel = (position: readonly [number, number, number]): THREE.Mesh => {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.31, .31, .24, 12), tyre);
+    wheel.position.set(...position);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.castShadow = true;
+    return wheel;
+  };
 
   if (obstacle.kind === "barrier") {
-    root.add(makeBox([7.5, .72, .38], [0, .58, 0], danger));
-    root.add(makeBox([7.65, .1, .46], [0, 1, 0], gold));
-    ([-3.2, 3.2] as const).forEach((x) => root.add(makeBox([.25, 1.2, .25], [x, .6, 0], dark)));
+    ([-2.45, 0, 2.45] as const).forEach((x, index) => {
+      root.add(makeBox([2.15, .48, .24], [x, .72, 0], index % 2 === 0 ? warningWhite : warningOrange));
+      root.add(makeBox([.92, .5, .255], [x + (index % 2 === 0 ? .43 : -.43), .72, -.01], index % 2 === 0 ? warningOrange : warningWhite));
+    });
+    ([-3.55, 3.55] as const).forEach((x) => {
+      root.add(makeBox([.22, 1.28, .22], [x, .64, 0], dark));
+      root.add(makeBox([.72, .12, .58], [x, .08, 0], concrete));
+    });
   } else if (obstacle.kind === "low-sign") {
     ([-3.45, 3.45] as const).forEach((x) => root.add(makeBox([.26, 2.45, .3], [x, 1.22, 0], cyan)));
     root.add(makeBox([7.15, .72, .4], [0, 2.2, 0], danger));
@@ -1696,24 +2082,35 @@ function createObstacle(obstacle: ResolvedSpatialRouteObstacle): THREE.Group {
     voidGlow.position.set(0, -.25, 0);
     root.add(voidGlow);
   } else if (obstacle.kind === "traffic") {
-    root.add(makeBox([2.15, 1.35, 3.4], [0, .82, 0], danger));
-    root.add(makeBox([1.82, .84, 1.65], [0, 1.72, -.35], dark));
-    ([-.72, .72] as const).forEach((x) => root.add(makeBox([.38, .16, .08], [x, .8, 1.74], gold)));
-    const light = new THREE.PointLight(0xff315e, 12, 7, 2);
-    light.position.set(0, 1.2, 1.8);
+    root.add(makeBox([2.08, .62, 3.72], [0, .58, 0], vehicleBody));
+    root.add(makeBox([1.92, .42, 1.18], [0, .94, -1.08], vehicleBody));
+    const cabin = makeBox([1.72, .7, 1.62], [0, 1.25, -.16], vehicleGlass);
+    cabin.rotation.x = -.035;
+    root.add(cabin, makeBox([1.5, .12, 1.36], [0, 1.64, -.18], vehicleBody));
+    ([-1.05, 1.05] as const).forEach((x) => {
+      root.add(makeWheel([x, .36, -1.12]), makeWheel([x, .36, 1.12]));
+    });
+    ([-.68, .68] as const).forEach((x) => {
+      root.add(makeBox([.34, .15, .07], [x, .66, 1.89], danger));
+      root.add(makeBox([.3, .14, .07], [x, .68, -1.89], warningWhite));
+    });
+    root.add(makeBox([.58, .16, .05], [0, .46, 1.91], warningWhite));
+    const light = new THREE.PointLight(0xff315e, 5, 5.5, 2);
+    light.position.set(0, .8, 1.95);
     root.add(light);
   } else if (obstacle.kind === "route-blocker") {
-    root.add(makeBox([2.4, .82, .38], [0, .58, 0], danger));
-    ([-.92, .92] as const).forEach((x) => root.add(makeBox([.2, 1.2, .22], [x, .6, 0], dark)));
+    root.add(makeBox([2.65, .72, .62], [0, .4, 0], concrete));
+    root.add(makeBox([2.25, .18, .08], [0, .72, .35], warningOrange));
+    ([-1.02, 1.02] as const).forEach((x) => root.add(makeBox([.16, 1.18, .18], [x, .76, 0], dark)));
     const beacon = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 8), gold);
     beacon.position.set(0, 1.18, 0);
     root.add(beacon);
   } else {
-    const ramp = makeBox([3.8, .34, 4.7], [0, .48, 0], cyan);
+    const ramp = makeBox([3.8, .3, 4.7], [0, .46, 0], dark);
     ramp.rotation.x = -.16;
     root.add(ramp);
     ([-1.15, 0, 1.15] as const).forEach((x) => {
-      const stripe = makeBox([.28, .06, 2.25], [x, .76, .25], gold);
+      const stripe = makeBox([.2, .055, 2.25], [x, .72, .25], warningOrange);
       stripe.rotation.x = -.16;
       root.add(stripe);
     });
@@ -1772,7 +2169,7 @@ function createShortcutTunnel(): THREE.Group {
   return group;
 }
 
-function createCheckpoint(): { readonly root: THREE.Group; readonly clamp: THREE.Group; readonly redLight: THREE.PointLight } {
+function createCheckpoint(): { readonly root: THREE.Group; readonly clamp: NightDropClampActor; readonly redLight: THREE.PointLight } {
   const root = new THREE.Group();
   const red = new THREE.MeshStandardMaterial({ color: 0xff415d, emissive: 0xff173d, emissiveIntensity: 1.4 });
   const white = new THREE.MeshStandardMaterial({ color: 0xe8eef4, roughness: .5 });
@@ -1787,71 +2184,75 @@ function createCheckpoint(): { readonly root: THREE.Group; readonly clamp: THREE
     barrier.position.set(x, 1.05, 0);
     root.add(barrier);
   }
-  const clamp = createClampModel();
-  clamp.position.set(2.05, 0, -.4);
-  root.add(clamp);
+  const clamp = new NightDropClampActor();
+  clamp.root.position.set(2.05, 0, -.4);
+  root.add(clamp.root);
   const redLight = new THREE.PointLight(0xff234d, 8, 18, 2);
   redLight.position.set(0, 4, 1);
   root.add(redLight);
   return { root, clamp, redLight };
 }
 
-function createClampModel(): THREE.Group {
-  const root = new THREE.Group();
-  const coat = new THREE.MeshStandardMaterial({ color: 0x81963c, roughness: .72, emissive: 0x28330e, emissiveIntensity: .25 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0xe8dfc8, roughness: .8 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xa56f50, roughness: .82 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(.78, 18, 12), coat);
-  body.scale.set(1, 1.25, .72);
-  body.position.y = 1.45;
-  const shirtPanel = new THREE.Mesh(new THREE.BoxGeometry(.52, .85, .14), shirt);
-  shirtPanel.position.set(0, 1.5, .58);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(.34, 16, 12), skin);
-  head.position.y = 2.65;
-  const legLeft = createCharacterLimb(.18, .72, coat);
-  legLeft.position.set(-.3, .75, 0);
-  const legRight = createCharacterLimb(.18, .72, coat);
-  legRight.position.set(.3, .75, 0);
-  root.add(body, shirtPanel, head, legLeft, legRight);
-  root.scale.setScalar(1.12);
-  return root;
-}
-
-function createCharacterLimb(radius: number, length: number, material: THREE.Material): THREE.Group {
-  const pivot = new THREE.Group();
-  const limb = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 5, 10), material);
-  limb.position.y = -length / 2;
-  limb.castShadow = true;
-  pivot.add(limb);
-  return pivot;
-}
-
 function createPenthouse(): THREE.Group {
   const group = new THREE.Group();
-  const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x0a1019, roughness: .42, metalness: .58, emissive: 0x4c3600, emissiveIntensity: .16 });
-  const gold = new THREE.MeshStandardMaterial({ color: 0xffd21c, emissive: 0xffc400, emissiveIntensity: 1.8, roughness: .24, metalness: .62 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x8a6d21, emissive: 0xffc94d, emissiveIntensity: .38, roughness: .2, metalness: .36 });
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(11, 25, 6), towerMaterial);
-  tower.position.set(0, 12.5, 4.5);
-  const door = new THREE.Mesh(new THREE.BoxGeometry(3.6, 4.2, .35), glass);
-  door.position.set(0, 2.1, 1.32);
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(6, .25, 2.5), gold);
-  canopy.position.set(0, 4.45, .72);
-  group.add(tower, door, canopy);
-  for (let row = 0; row < 9; row += 1) {
-    for (let column = -2; column <= 2; column += 1) {
-      if ((row + column + 2) % 4 === 0) continue;
-      const window = new THREE.Mesh(new THREE.PlaneGeometry(.72, .28), glass);
-      window.position.set(column * 1.55, 6.1 + row * 1.75, 1.46);
-      group.add(window);
+  const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x111b26, roughness: .5, metalness: .48, emissive: 0x241b08, emissiveIntensity: .1 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x32424b, emissive: 0x4d3b12, emissiveIntensity: .12, roughness: .34, metalness: .7 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xffd21c, emissive: 0xffc400, emissiveIntensity: 1.12, roughness: .24, metalness: .62 });
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0x7f6429,
+    emissive: 0xffc94d,
+    emissiveIntensity: .24,
+    roughness: .2,
+    metalness: .36,
+    side: THREE.DoubleSide,
+  });
+  const towerGeometry = new THREE.BoxGeometry(3.2, 15.5, 5);
+  const leftTower = new THREE.Mesh(towerGeometry, towerMaterial);
+  leftTower.position.set(-4.4, 7.75, 4);
+  const rightTower = new THREE.Mesh(towerGeometry, towerMaterial);
+  rightTower.position.set(4.4, 7.75, 4);
+  const lobby = new THREE.Mesh(new THREE.BoxGeometry(5.8, 8.4, 1.2), towerMaterial);
+  lobby.position.set(0, 4.2, 5.55);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.5, .35), glass);
+  door.position.set(0, 1.75, 4.88);
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(5.2, .25, 2), gold);
+  canopy.position.set(0, 3.82, 4.25);
+  group.add(leftTower, rightTower, lobby, door, canopy);
+  for (const towerX of [-4.4, 4.4]) {
+    for (const edgeX of [-1.42, 1.42]) {
+      const vertical = new THREE.Mesh(new THREE.BoxGeometry(.16, 15.6, .18), trim);
+      vertical.position.set(towerX + edgeX, 7.8, 1.42);
+      group.add(vertical);
+    }
+    for (let floor = 1; floor < 8; floor += 1) {
+      const ledge = new THREE.Mesh(new THREE.BoxGeometry(3.1, .09, .26), trim);
+      ledge.position.set(towerX, floor * 1.82, 1.38);
+      group.add(ledge);
     }
   }
+  for (let row = 0; row < 5; row += 1) {
+    ([-1, 1] as const).forEach((side) => {
+      for (let column = -1; column <= 1; column += 1) {
+        if ((row + column + side + 3) % 4 === 0) continue;
+        const window = new THREE.Mesh(new THREE.PlaneGeometry(.62, .26), glass);
+        window.position.set(side * 4.4 + column * .78, 5.3 + row * 1.75, 1.46);
+        group.add(window);
+      }
+    });
+  }
   const address = createNeonSign("PENTHOUSE 2401", 0xffd21c);
-  address.position.set(0, 5.15, 1.5);
-  address.scale.setScalar(.75);
+  address.position.set(0, 4.55, 4.84);
+  address.scale.setScalar(.68);
   group.add(address);
-  const light = new THREE.PointLight(0xffc933, 38, 22, 2);
-  light.position.set(0, 5, 2);
+  const rooftopBeacon = new THREE.Mesh(new THREE.TorusGeometry(1.25, .06, 8, 36), gold);
+  rooftopBeacon.rotation.x = Math.PI / 2;
+  rooftopBeacon.position.set(0, 16.2, 4.2);
+  group.add(rooftopBeacon);
+  const lobbyLight = new THREE.PointLight(0xffce68, 6, 14, 2);
+  lobbyLight.position.set(0, 3.1, 3.5);
+  group.add(lobbyLight);
+  const light = new THREE.PointLight(0xffc933, 24, 20, 2);
+  light.position.set(0, 4.5, 3.2);
   group.add(light);
   return group;
 }
@@ -1871,7 +2272,9 @@ function createStreetLamp(color: number): THREE.Group {
   pool.rotation.x = -Math.PI / 2;
   pool.scale.set(1.25, .65, 1);
   pool.position.set(.68, .08, 0);
-  group.add(pole, arm, bulb, pool);
+  const practicalLight = new THREE.PointLight(color, 13, 13, 2);
+  practicalLight.position.set(.68, 3.45, 0);
+  group.add(pole, arm, bulb, pool, practicalLight);
   return group;
 }
 
@@ -1897,6 +2300,45 @@ function createNeonSign(label: string, color: number): THREE.Mesh {
   return new THREE.Mesh(new THREE.PlaneGeometry(2.8, .8), material);
 }
 
+function createNightDropSky(): THREE.Mesh {
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    vertexShader: `
+      varying vec3 vDirection;
+      void main() {
+        vDirection = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vDirection;
+      float hash(vec3 point) {
+        return fract(sin(dot(point, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+      }
+      void main() {
+        float height = clamp(vDirection.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 horizon = vec3(0.035, 0.105, 0.16);
+        vec3 middle = vec3(0.012, 0.035, 0.075);
+        vec3 zenith = vec3(0.002, 0.005, 0.018);
+        vec3 colour = mix(horizon, middle, smoothstep(0.42, 0.68, height));
+        colour = mix(colour, zenith, smoothstep(0.68, 0.98, height));
+        float cityGlow = 1.0 - smoothstep(0.0, 0.34, abs(vDirection.y + 0.02));
+        colour += cityGlow * vec3(0.028, 0.045, 0.06);
+        float star = step(0.9977, hash(floor(vDirection * 190.0)));
+        star *= smoothstep(0.53, 0.82, height);
+        colour += star * vec3(0.55, 0.72, 0.82);
+        gl_FragColor = vec4(colour, 1.0);
+      }
+    `,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(218, 30, 18), material);
+  sky.name = "night-drop-procedural-sky";
+  sky.frustumCulled = false;
+  sky.renderOrder = -100;
+  return sky;
+}
+
 function createRain(lod: NightDropRunnerLod): THREE.Points {
   const dropCount = lod === "low" ? 220 : lod === "medium" ? 380 : 540;
   const positions = new Float32Array(dropCount * 3);
@@ -1913,6 +2355,10 @@ function createRain(lod: NightDropRunnerLod): THREE.Points {
 
 function freezeStaticTransforms(root: THREE.Object3D): void {
   root.traverse((object) => {
+    if (object.userData.dynamicPresentation) {
+      object.matrixAutoUpdate = true;
+      return;
+    }
     object.updateMatrix();
     object.matrixAutoUpdate = false;
   });
@@ -2008,6 +2454,12 @@ function requireCue(route: ComposedSpatialRoute, kind: ResolvedSpatialRouteCue["
 function segmentAtProgress(route: ComposedSpatialRoute, progress: number): string {
   const distance = route.totalLength * progress;
   return route.segments.find((segment) => segment.startDistance <= distance && segment.endDistance >= distance)?.id ?? route.segments.at(-1)!.id;
+}
+
+function presentationEnvelope(elapsedMs: number, startsAtMs: number, endsAtMs: number, fadeMs: number): number {
+  const enter = smoothstep((elapsedMs - startsAtMs) / Math.max(1, fadeMs));
+  const exit = 1 - smoothstep((elapsedMs - endsAtMs + fadeMs) / Math.max(1, fadeMs));
+  return enter * exit;
 }
 
 function smoothstep(value: number): number {

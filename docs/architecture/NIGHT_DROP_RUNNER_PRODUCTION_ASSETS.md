@@ -2,17 +2,19 @@
 
 ## Status
 
-The first Blender-authored production pack is installed. The segmented,
-bone-rigged Dash and all thirteen named animation clips are enabled by default.
-The pack also contains twelve semantic environment modules at three LOD levels
-and four shared PBR material-map sets.
+The first Blender-authored production pack is installed. The armature-skinned
+Dash and all thirteen named animation clips are enabled by default.
+The player-facing environment now uses eight independently placeable building
+templates from one optimized curve-safe city-kit bundle. The pack also retains
+twelve semantic whole-street modules at three LOD levels for diagnostics and
+contains four shared PBR material-map sets.
 
 Rigid whole-street environment modules are not player-facing by default. A
 single transformed module cannot follow a long curved route segment without
 its road slab or buildings cutting across the spline. The live game therefore
-uses curve-sampled building placement and the continuous route ribbon, while
-the Blender modules remain available for asset inspection until they are split
-into independently placeable building and prop pieces.
+uses curve-sampled building placement, the continuous route ribbon and the
+independent city-kit buildings. The rigid Blender modules remain available only
+for asset inspection.
 
 Use the procedural fallback only for comparison or diagnosis:
 
@@ -48,11 +50,19 @@ Expected model:
 
 `/assets/night-drop/runner/characters/dash/dash.glb`
 
-The v1 Blender pack uses a controlled set of bone-parented character segments
-to establish silhouette, costume, timing and integration. A later sculpt can
-replace it with one skinned mesh or a small controlled set of skinned meshes
-without changing the loader. The loader accepts the first listed production
-clip name or its lowercase fallback alias.
+The current Blender pack authors 52 overlapping character pieces and batches
+them into one armature-skinned Blender object before GLB export. Ten material
+primitives retain the visual layers while replacing the original 52 runtime
+skin nodes. It includes a lean adult courier silhouette, hood, delivery sling,
+gold carabiner, route phone, layered backpack, coat tails, straps, knees,
+shoulders and illuminated shoe details. Controlled two-bone weighting softens
+the torso, hood, elbow and knee transitions; dedicated delivery-bag and coat-tail
+bones provide event-driven secondary motion. The current file contains 12,424
+triangles, 17 bones, 11,217 exported weighted vertices, at most two influences
+per vertex and all thirteen clips in an 828,108-byte GLB. A later professional
+sculpt can replace the modular skin with one continuous skinned mesh without
+changing the skeleton, loader or animation contract. The loader accepts the
+first listed production clip name or its lowercase fallback alias.
 
 | Role | Production clip | Behaviour |
 | --- | --- | --- |
@@ -133,27 +143,54 @@ The physical streamed city is the environment.
 - Reduce near-route mass before changing the camera. Camera movement must not
   be used to hide invalid physical placement.
 
-Production manifest `1.4.0` is the first pack generated against these rules,
-but the runtime still requires independently placeable environment pieces
-before those Blender buildings can replace curve-sampled placement safely.
+Production manifest `1.9.0` preserves these rules. City-kit generator v2 is
+the first player-facing Blender architecture pack to satisfy them without
+changing a RouteRun route.
 
 ### Curve-safe night city kit
 
 The player-facing city kit treats the route as protected geometry:
 
-- the continuous road occupies the central 4.8m half-width;
-- the pavement and route edge remain clear through 6.4m;
+- the continuous road uses each authored segment's half-width;
+- pavements, granite kerbs and service clearances remain outside that road;
 - building origins are sampled directly from the route tangent and normal;
-- facade faces begin at least 11.6m from the centreline;
+- standard facade faces begin at 8.45m from the centreline, branch facades at
+  8.15m and alley facades at 6.0–6.3m, always beyond their local route width;
 - local pavement frontage approaches the route but stops outside the road edge;
 - junction buildings use explicit corner placements and never inherit a long
   straight module transform.
+
+The city bundle contains Glasshouse, Night Market, Service Block and Stacked
+Flats archetypes in two variants each. Every template has authored windows,
+entrances, frontage, rooftop services and practical lights. Geometry is batched
+into at most five physical surface groups: structure, metal, glass, warm
+interiors and local practical light. The eight templates total 41,864 triangles;
+the combined bundle is 2,960,908 bytes. Runtime placement scales and rotates
+these buildings independently while road and junction geometry remains
+authoritative.
 
 Night lighting follows a restrained hierarchy. Building mass is dark navy,
 charcoal or deep plum; warm and cool windows provide occupancy; entrances,
 shops, signs and street lamps add local pools of light; district neon is an
 accent rather than a whole-building wash. No painted background is used. The
-visible city remains physical, route-aware geometry.
+visible city remains physical, route-aware geometry. Route-side dressing adds
+Glasshouse directories and lockers, an Afterhours kiosk, Service Quarter
+shutters and ducts, Canal Works tram shelters, and Upper Heights beacons while
+preserving the road-clearance contract.
+
+## Clamp and Mara presentation
+
+Clamp uses the supplied approved game-pack art as a camera-facing 2.5D actor
+inside the physical checkpoint. Authority, scanner and defeated poses share a
+world-space contact shadow, threat light and deterministic entrance/exit
+timing. A compact geometric proxy remains visible until the textures finish
+loading, so the encounter never loses its blocker or threat silhouette.
+
+Mara remains a transient dispatcher layer rather than a resident HUD panel.
+Her neutral, warning and amused portraits accompany short route, junction,
+continuation, Clamp, penthouse and win messages. Each message self-dismisses
+after 1.8 seconds, and Mara is absent in idle. Neither character adds outcome,
+collision, route or recovery state.
 
 ### Junction and alley street network
 
@@ -206,7 +243,9 @@ Expected folder pattern:
 
 `/assets/night-drop/runner/materials/<material>_albedo.webp`
 
-Optional maps use `_normal.webp`, `_roughness.webp` and `_emissive.webp`.
+Optional maps use `_normal.webp`, `_roughness.webp` and `_emissive.webp`. The
+installed v2 maps are 512px and include material-specific aggregate, seams,
+rain streaks, repair tone, metal ribbing and controlled roughness variation.
 Maximum dimensions are 512px low, 1024px medium and 2048px high. Use square,
 power-of-two maps, avoid baked text, pack repeated signage separately and keep
 emissive areas restrained enough that route cyan and collection gold remain the
@@ -215,13 +254,14 @@ first approved integration without changing logical IDs.
 
 ## Feedback and audio handoff
 
-Sixteen timing hooks are wired. Production audio should be OGG, 48 kHz, with a
+Seventeen timing hooks are wired. Production audio should be OGG, 48 kHz, with a
 short clean tail and no built-in silence. Keep one-shot cues mono unless the
 sound genuinely needs width; the runtime owns spatial placement and gain.
 
 | Logical ID | Expected file |
 | --- | --- |
 | `audio.runner.start` | `runner_start.ogg` |
+| `audio.runner.footstep` | `runner_footstep_01.ogg` |
 | `audio.runner.jump` | `runner_jump.ogg` |
 | `audio.runner.slide` | `runner_slide.ogg` |
 | `audio.runner.dodge` | `runner_dodge.ogg` |
@@ -238,23 +278,39 @@ sound genuinely needs width; the runtime owns spatial placement and gain.
 | `audio.round.win` | `round_win.ogg` |
 | `audio.runner.recovery` | `runner_recovery.ogg` |
 
-All files live under `/assets/night-drop/runner/audio/`. The current oscillator
-sounds and restrained haptic patterns are timing placeholders only.
+All files live under `/assets/night-drop/runner/audio/`. The current deterministic
+procedural mix provides filtered rain, paced footsteps, layered tonal cues,
+short noise transients and restrained haptic patterns. It is a timing and mix
+placeholder only; the supplied codex packs contain an audio brief but no
+mastered audio or voice files.
+
+The runtime reads `/assets/night-drop/runner/audio/production-audio.json` after
+the first user gesture. Add only delivered files to its `files` map, using the
+feedback cue key and a path relative to the manifest. Successfully decoded
+buffers replace their procedural cue independently; missing or invalid entries
+fall back without muting the rest of the round. The asset validator rejects
+unknown cue keys, unsafe paths and listed files that do not exist.
 
 ## Reproducible Blender source
 
-The committed generator is
-`apps/night-drop/tools/blender/generate-night_drop_runner_assets.py`. It writes
-only to the Night Drop public runner asset directory and produces a JSON report
-containing file sizes, mesh counts, triangle counts, animation names and bone
-count. Blender 5.2 LTS generated the initial pack.
+The base pack generator is
+`apps/night-drop/tools/blender/generate-night_drop_runner_assets.py`. The
+player-facing architecture generator is
+`apps/night-drop/tools/blender/generate_night_drop_city_kit.py`, and
+`regenerate_night_drop_materials.py` refreshes only the shared PBR maps. All
+three write only to the Night Drop public runner directory. Their JSON reports
+contain file sizes, mesh counts, triangle counts, animation names and bone
+counts. Blender 5.2 LTS generated the current pack.
 
 ## Existing 2D source packages
 
 The approved Night Drop codex PNGs, spritesheets and contact sheets remain valid
-reference art and can continue to support board-mode or UI production. They do
-not replace the skinned Dash GLB, modular environment GLBs, PBR materials or
-authored runner audio required by this third-person presentation.
+reference art and can continue to support board-mode or transient UI
+presentation. They are flattened PNGs rather than layered skeletal sources and
+do not replace the skinned Dash GLB, modular environment GLBs, PBR materials or
+authored runner audio required by this third-person presentation. The playable
+runner does not use a Spine runtime: Blender armature animation and GLB are the
+production character path for a physically navigable 3D city.
 
 ## Performance and QA gate
 
@@ -264,10 +320,16 @@ material for diagnostic comparison, but their earlier performance results are
 not an acceptance signal: correct route geometry takes priority over a module
 that renders quickly in the wrong position.
 
-The player-facing curve-safe Cross-City idle view rendered 7,750 triangles at
-390×844 during this correction pass, with production Dash active and no
-horizontal overflow. Further optimisation should batch the independently
-placed city kit only after its curve and junction placement is approved.
+The player-facing curve-safe Cross-City view at 390×844 renders at a 1.0 scale
+with dynamic shadows disabled in favour of material depth, practical lights and
+the grounded character shadow. The verified v1.5 idle frame used 134 render
+calls and 49,340 triangles; the verified early movement frame used 205 render
+calls and 65,948 triangles at 59.5 FPS. Production Dash, 111 mobile city
+placements and eight
+deterministic street-life placements loaded; two nearby actors were visible in
+both measured frames, with no horizontal or vertical overflow. Desktop can
+raise render scale while the same deterministic spatial placement remains
+unchanged.
 
 Play is disabled briefly while the production character loads. Curve-sampled
 environment placement is available immediately; rigid environment modules load
@@ -287,16 +349,77 @@ Before accepting a production pack:
    or deterministic replay.
 7. Profile real mid-tier iOS and Android devices with audio enabled.
 
+## Premium vertical-slice presentation pass
+
+The v1.5 Cross-City slice adds presentation quality without changing a paid
+result or RouteRun command:
+
+- Dash cadence is calibrated independently from the compressed demonstration
+  timeline, with acceleration smoothing, turn lean and landing compression;
+- the chase camera responds to speed, route curvature, junction anticipation,
+  obstacle proximity and arrival staging while keeping a bounded runner gap;
+- deterministic cross traffic appears only as distant junction dressing and is
+  never a collider or outcome input;
+- cyan Shortcut, red Clamp and gold delivery particle fields share strict
+  mobile budgets and preserve the route as the brightest navigation cue;
+- the final address uses an open two-tower entrance so Dash remains visible
+  throughout delivery and celebration;
+- the player shell includes an asset-loading presentation, functional menu,
+  sound toggle and pre-round Turbo control;
+- GLTFLoader is isolated into an on-demand production-asset chunk rather than
+  being duplicated inside the main runner module.
+
+At 390×844 the idle, movement and win frames have no horizontal or vertical
+overflow. Turbo changes presentation speed only; it does not change the route,
+feature state, recovery snapshot or deterministic result.
+
+## Production consolidation milestone
+
+The Cross-City runner entry is dynamically loaded, and its application code is
+now separated from Three.js, the optional GLTF loader, Hustle Core and RouteRun.
+The verified production build emits a 157.30 kB runner application chunk
+(50.49 kB gzip) instead of a single 781.45 kB runner bundle. The cached Three.js
+runtime remains 603.20 kB minified (152.12 kB gzip); it is shared rather than
+duplicated and remains the next profiling target after approved art is frozen.
+
+This milestone does not claim studio audio, a final character sculpt or mobile
+certification. Those require the external production sources and physical
+devices listed below. The local implementation is ready to ingest them without
+changing route, outcome, recovery or wallet contracts.
+
 ## External production dependencies
 
 The production pipeline is no longer blocked by missing GLBs. Remaining work
 for a top-tier commercial release is iterative rather than architectural:
 
-- art-direct and refine Dash's face, clothing shapes and deformation quality;
-- expand facade, prop and signage variety beyond the first Glasshouse kit;
-- replace the initial procedural PBR maps with authored high-resolution maps;
+- replace the segmented Dash prototype with an approved sculpted, skinned model;
+- expand facade, vehicle, pedestrian, prop and signage variety across districts;
+- replace the improved 512px procedural maps with authored 1K/2K PBR surfaces;
+- add baked light/AO detail and device-tiered post-processing after mobile
+  profiling;
 - produce final effects, audio mix and voice work;
 - profile and optimise the approved art on real iOS and Android hardware.
 
 The proxy remains available as a recovery and performance reference, not as the
 default player-facing presentation.
+
+## Deterministic street-life and obstacle dressing
+
+Street life is presentation-only and is derived from the selected spatial
+route. Pedestrians, umbrella walkers and steam vents are seeded from the route
+definition, so a replay produces the same placement and motion timing without
+adding gameplay state.
+
+- actors remain at least 0.72m beyond the playable road half-width;
+- junction entries retain a 21m exclusion zone for clear decisions and sightlines;
+- actors are revealed only inside the active camera window;
+- street life is hidden while a branch detour is active, preventing main-route
+  dressing from appearing inside an alternate street;
+- no pedestrian, vehicle or steam element participates in collision, outcomes,
+  payouts, command timing or recovery data.
+
+Roadwork barriers, parked vehicles, ramps and route blockers retain their
+existing RouteRun obstacle metadata and action windows. Their Night Drop meshes
+are cosmetic replacements only. Alley walls use neutral concrete, warm/cool
+window light and structural piers rather than uninterrupted neon planes, keeping
+the road surface and route guidance dominant during motion.

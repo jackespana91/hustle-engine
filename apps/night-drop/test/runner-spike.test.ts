@@ -11,6 +11,8 @@ import {
   composeNightDropRunnerRoute,
 } from "../src/runner-spike/runner-routes.js";
 import { describeNightDropBuilding } from "../src/runner-spike/night-drop-building-kit.js";
+import { NIGHT_DROP_CITY_KIT, validateNightDropCityKit } from "../src/runner-spike/night-drop-city-assets.js";
+import { resolveNightDropCityLifePlacements } from "../src/runner-spike/night-drop-city-life.js";
 import { resolveNightDropDistrict } from "../src/runner-spike/night-drop-districts.js";
 import { NIGHT_DROP_RUNNER_FEEDBACK } from "../src/runner-spike/night-drop-runner-feedback.js";
 import {
@@ -23,6 +25,7 @@ import {
   resolveNightDropEnvironmentRole,
   selectNightDropEnvironmentInstallation,
   selectNightDropRunnerLod,
+  stripNightDropDashRootMotion,
   validateNightDropRunnerProductionManifest,
   type NightDropRunnerProductionManifest,
 } from "../src/runner-spike/night-drop-runner-assets.js";
@@ -362,10 +365,24 @@ describe("Night Drop cinematic runner routes", () => {
       betMinor: 100,
       winMinor: 2_400,
     });
-  });
+  }, 15_000);
 });
 
 describe("Night Drop 3D building kit", () => {
+  it("keeps deterministic street life on the pavement and away from every junction", () => {
+    NIGHT_DROP_RUNNER_ROUTES.forEach(({ id }) => {
+      const route = composeNightDropRunnerRoute(id);
+      const first = resolveNightDropCityLifePlacements(route, "medium");
+      const second = resolveNightDropCityLifePlacements(route, "medium");
+      expect(second).toEqual(first);
+      expect(first.length).toBeGreaterThan(5);
+      first.forEach((placement) => {
+        expect(placement.lateral - placement.routeHalfWidth).toBeGreaterThan(.719);
+        expect(route.branches.every((branch) => Math.abs(branch.entryProgress - placement.progress) * route.totalLength >= 21)).toBe(true);
+      });
+    });
+  });
+
   it("produces a deterministic mix of authored city archetypes", () => {
     const firstPass = Array.from({ length: 12 }, (_, index) => describeNightDropBuilding(index, index % 2));
     const secondPass = Array.from({ length: 12 }, (_, index) => describeNightDropBuilding(index, index % 2));
@@ -390,6 +407,13 @@ describe("Night Drop 3D building kit", () => {
 });
 
 describe("Night Drop runner production asset contract", () => {
+  it("registers a complete pair of curve-safe Blender city templates per archetype", () => {
+    expect(() => validateNightDropCityKit()).not.toThrow();
+    expect(NIGHT_DROP_CITY_KIT).toHaveLength(8);
+    expect(new Set(NIGHT_DROP_CITY_KIT.map(({ id }) => id)).size).toBe(8);
+    expect(NIGHT_DROP_CITY_KIT.every(({ url }) => url.startsWith("/assets/night-drop/runner/city-kit/"))).toBe(true);
+  });
+
   it("validates the complete character, animation, LOD and environment manifest", () => {
     expect(() => validateNightDropRunnerProductionManifest(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST)).not.toThrow();
     expect(Object.keys(NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST.character.animations)).toEqual(NIGHT_DROP_DASH_ANIMATION_ROLES);
@@ -413,6 +437,21 @@ describe("Night Drop runner production asset contract", () => {
     expect(selectNightDropEnvironmentInstallation(false, "modules")).toBe("curve-safe");
   });
 
+  it("removes embedded Dash root translation without flattening character animation", () => {
+    const clip = new THREE.AnimationClip("Dash_Run", 1, [
+      new THREE.VectorKeyframeTrack("Dash_Rig.position", [0, 1], [0, 0, 0, 0, 0, 4]),
+      new THREE.VectorKeyframeTrack("root.position", [0, 1], [0, 0, 0, 0, 1, 3]),
+      new THREE.VectorKeyframeTrack("hips.position", [0, 1], [0, 1, 0, 0, 1.1, 0]),
+      new THREE.QuaternionKeyframeTrack("root.quaternion", [0, 1], [0, 0, 0, 1, 0, .2, 0, .98]),
+    ]);
+
+    const sanitized = stripNightDropDashRootMotion(clip);
+
+    expect(sanitized.tracks.map(({ name }) => name)).toEqual(["hips.position", "root.quaternion"]);
+    expect(sanitized.name).toBe(clip.name);
+    expect(sanitized.duration).toBe(clip.duration);
+  });
+
   it("rejects duplicate environment roles before any production asset is fetched", () => {
     const duplicate = {
       ...NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
@@ -426,7 +465,7 @@ describe("Night Drop runner production asset contract", () => {
 
   it("provides unique logical production audio hooks for every placeholder cue", () => {
     const specs = Object.values(NIGHT_DROP_RUNNER_FEEDBACK);
-    expect(specs).toHaveLength(16);
+    expect(specs).toHaveLength(17);
     expect(new Set(specs.map(({ logicalId }) => logicalId)).size).toBe(specs.length);
     expect(specs.every(({ productionUrl }) => productionUrl.startsWith("/assets/night-drop/runner/audio/"))).toBe(true);
     expect(specs.every(({ hapticPattern }) => hapticPattern.every((duration) => duration > 0))).toBe(true);

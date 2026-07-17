@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -63,15 +64,17 @@ PALETTE = {
     "skin": (0.48, 0.21, 0.12, 1.0),
     "skin_light": (0.72, 0.38, 0.23, 1.0),
     "hair": (0.012, 0.018, 0.04, 1.0),
-    "jacket": (0.018, 0.045, 0.085, 1.0),
-    "jacket_panel": (0.025, 0.11, 0.16, 1.0),
-    "trouser": (0.018, 0.026, 0.052, 1.0),
-    "shoe": (0.035, 0.025, 0.075, 1.0),
+    # Dash is a courier in technical streetwear, not a neon robot. Broad body
+    # masses stay charcoal and the saturated colours are reserved for trim.
+    "jacket": (0.012, 0.019, 0.032, 1.0),
+    "jacket_panel": (0.024, 0.037, 0.052, 1.0),
+    "trouser": (0.011, 0.015, 0.025, 1.0),
+    "shoe": (0.024, 0.018, 0.046, 1.0),
     "white": (0.82, 0.94, 0.98, 1.0),
 }
 
 REPORT: dict[str, object] = {
-    "generator": "night-drop-blender-production-v1",
+    "generator": "night-drop-blender-production-v3",
     "blenderVersion": bpy.app.version_string,
     "environment": [],
     "character": {},
@@ -204,6 +207,8 @@ def add_cylinder(
     obj = bpy.context.object
     obj.name = name
     obj.data.materials.append(mat)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
     apply_bevel(obj, bevel, 1)
     return obj
 
@@ -216,11 +221,18 @@ def add_sphere(
     *,
     subdivisions: int = 2,
 ) -> bpy.types.Object:
-    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=subdivisions, radius=1.0, location=location)
+    bpy.ops.mesh.primitive_uv_sphere_add(
+        segments=12 + subdivisions * 4,
+        ring_count=6 + subdivisions * 3,
+        radius=1.0,
+        location=location,
+    )
     obj = bpy.context.object
     obj.name = name
     obj.scale = scale
     obj.data.materials.append(mat)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     return obj
@@ -238,6 +250,8 @@ def add_plane_disc(
     obj = bpy.context.object
     obj.name = name
     obj.data.materials.append(mat)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
     return obj
 
 
@@ -543,6 +557,7 @@ def dash_materials() -> dict[str, bpy.types.Material]:
         "shoe": material("Dash_Shoe", PALETTE["shoe"], metallic=0.28, roughness=0.28),
         "cyan": material("Dash_CyanTrim", (0.01, 0.22, 0.3, 1.0), metallic=0.25, roughness=0.24, emission=PALETTE["cyan"], emission_strength=1.5),
         "magenta": material("Dash_MagentaTrim", (0.25, 0.01, 0.12, 1.0), metallic=0.22, roughness=0.26, emission=PALETTE["magenta"], emission_strength=1.35),
+        "gold": material("Dash_GoldHardware", PALETTE["gold"], metallic=0.72, roughness=0.2, emission=PALETTE["gold"], emission_strength=0.32),
         "white": material("Dash_Eye", PALETTE["white"], roughness=0.3, emission=PALETTE["cyan"], emission_strength=0.12),
     }
 
@@ -568,6 +583,9 @@ def create_dash_armature() -> bpy.types.Object:
     bone("hips", (0, 0, 0.82), (0, 0, 1.17), "root")
     bone("spine", (0, 0, 1.10), (0, 0, 1.78), "hips")
     bone("head", (0, 0, 1.68), (0, 0, 2.34), "spine")
+    bone("delivery_bag", (0, 0.12, 1.18), (0, 0.34, 1.67), "spine")
+    bone("coat_tail.L", (-0.18, 0.04, 1.18), (-0.2, 0.1, 0.72), "hips")
+    bone("coat_tail.R", (0.18, 0.04, 1.18), (0.2, 0.1, 0.72), "hips")
     for side, x in (("L", -0.24), ("R", 0.24)):
         bone(f"upper_leg.{side}", (x, 0, 1.02), (x, 0, 0.58), "hips")
         bone(f"lower_leg.{side}", (x, 0, 0.60), (x, 0, 0.20), f"upper_leg.{side}")
@@ -586,13 +604,70 @@ def create_dash_armature() -> bpy.types.Object:
     return armature
 
 
-def parent_to_bone(obj: bpy.types.Object, armature: bpy.types.Object, bone_name: str) -> None:
+def skin_to_bone(
+    obj: bpy.types.Object,
+    armature: bpy.types.Object,
+    bone_name: str,
+    *,
+    blend_bone: str | None = None,
+    blend_from: str = "end",
+    blend_maximum: float = 0.42,
+) -> None:
+    """Bind a mesh through GLTF skin weights instead of rigid bone parenting.
+
+    Dash intentionally uses modular stylised meshes, but every renderable body
+    piece is exported as an armature-deformed primitive. This keeps the compact
+    mobile silhouette while producing real JOINTS/WEIGHTS data that can be
+    replaced by an artist-authored continuous mesh without changing runtime
+    contracts or animation names.
+    """
     world_matrix = obj.matrix_world.copy()
     obj.parent = armature
-    obj.parent_type = "BONE"
-    obj.parent_bone = bone_name
+    obj.parent_type = "OBJECT"
     obj.matrix_world = world_matrix
+    modifier = obj.modifiers.new("DashArmature", "ARMATURE")
+    modifier.object = armature
+    modifier.use_vertex_groups = True
+    group = obj.vertex_groups.new(name=bone_name)
+    coordinates = [vertex.co.z for vertex in obj.data.vertices]
+    minimum = min(coordinates, default=0.0)
+    maximum = max(coordinates, default=1.0)
+    span = max(0.0001, maximum - minimum)
+    secondary_group = obj.vertex_groups.new(name=blend_bone) if blend_bone else None
+    for vertex in obj.data.vertices:
+        normalized = (vertex.co.z - minimum) / span
+        edge = normalized if blend_from == "end" else 1.0 - normalized
+        blend = max(0.0, min(1.0, (edge - 0.52) / 0.48)) * blend_maximum if secondary_group else 0.0
+        group.add([vertex.index], 1.0 - blend, "REPLACE")
+        if secondary_group and blend > 0:
+            secondary_group.add([vertex.index], blend, "REPLACE")
     obj["dashBone"] = bone_name
+    obj["dashSkinned"] = True
+
+
+def add_dash_torus(
+    name: str,
+    location: tuple[float, float, float],
+    major_radius: float,
+    minor_radius: float,
+    mat: bpy.types.Material,
+    *,
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_torus_add(
+        major_radius=major_radius,
+        minor_radius=minor_radius,
+        major_segments=12,
+        minor_segments=6,
+        location=location,
+        rotation=rotation,
+    )
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.materials.append(mat)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    return obj
 
 
 def add_limb(
@@ -617,46 +692,173 @@ def add_limb(
 
 def build_dash_mesh(armature: bpy.types.Object) -> None:
     mats = dash_materials()
-    torso = add_box("Dash_Torso", (0, 0, 1.43), (0.82, 0.42, 0.72), mats["jacket"], bevel=0.15)
-    hips = add_box("Dash_Hips", (0, 0, 1.02), (0.62, 0.38, 0.28), mats["trouser"], bevel=0.1)
-    chest_panel = add_box("Dash_ChestTrim", (0, -0.225, 1.48), (0.38, 0.045, 0.32), mats["cyan"], bevel=0.03)
-    collar = add_box("Dash_Collar", (0, 0, 1.74), (0.7, 0.42, 0.16), mats["panel"], bevel=0.07)
-    backpack = add_box("Dash_Backpack", (0, 0.30, 1.42), (0.62, 0.25, 0.72), mats["panel"], bevel=0.13)
-    backpack_mark = add_box("Dash_BackpackMark", (0, 0.435, 1.43), (0.32, 0.035, 0.22), mats["magenta"], bevel=0.03)
-    for obj, bone in ((torso, "spine"), (chest_panel, "spine"), (collar, "spine"), (backpack, "spine"), (backpack_mark, "spine"), (hips, "hips")):
-        parent_to_bone(obj, armature, bone)
+    # Keep Dash readable from the chase camera without drifting into mascot
+    # proportions. D01's silhouette is lean, long-coated and adult; the
+    # delivery pack, hood and footwear should support that shape rather than
+    # widening it.
+    torso = add_sphere("Dash_Torso", (0, 0, 1.45), (0.39, 0.25, 0.52), mats["jacket"], subdivisions=3)
+    hips = add_sphere("Dash_Hips", (0, 0.02, 1.01), (0.30, 0.215, 0.19), mats["trouser"], subdivisions=2)
+    chest_panel = add_box("Dash_ChestPanel", (0, -0.215, 1.50), (0.33, 0.042, 0.35), mats["panel"], bevel=0.03)
+    zipper = add_box("Dash_CyanZipper", (0, -0.254, 1.49), (0.035, 0.018, 0.53), mats["cyan"], bevel=0.012)
+    collar = add_box("Dash_Collar", (0, 0, 1.78), (0.60, 0.37, 0.15), mats["panel"], bevel=0.065)
+    jacket_hem = add_box("Dash_JacketHem", (0, 0.04, 1.12), (0.62, 0.40, 0.15), mats["panel"], bevel=0.055)
+    backpack = add_box("Dash_Backpack", (0, 0.285, 1.42), (0.49, 0.245, 0.65), mats["panel"], bevel=0.13)
+    backpack_flap = add_box("Dash_BackpackFlap", (0, 0.445, 1.61), (0.45, 0.05, 0.22), mats["jacket"], bevel=0.05)
+    backpack_mark = add_box("Dash_BackpackMark", (0, 0.486, 1.44), (0.22, 0.024, 0.11), mats["magenta"], bevel=0.03)
+    backpack_trim = add_box("Dash_BackpackTrim", (0, 0.471, 1.22), (0.41, 0.023, 0.04), mats["cyan"], bevel=0.014)
+    for strap_x in (-0.205, 0.205):
+        strap = add_box(f"Dash_BackpackStrap_{strap_x}", (strap_x, -0.195, 1.45), (0.065, 0.04, 0.61), mats["panel"], bevel=0.022, rotation=(0, math.radians(strap_x * 16), 0))
+        skin_to_bone(strap, armature, "spine")
+    skin_to_bone(torso, armature, "spine", blend_bone="hips", blend_from="start", blend_maximum=0.34)
+    skin_to_bone(hips, armature, "hips", blend_bone="spine", blend_from="end", blend_maximum=0.28)
+    for obj, bone in ((chest_panel, "spine"), (zipper, "spine"), (collar, "spine"), (jacket_hem, "spine"), (backpack, "spine"), (backpack_flap, "spine"), (backpack_mark, "spine"), (backpack_trim, "spine")):
+        skin_to_bone(obj, armature, "delivery_bag" if obj in (backpack, backpack_flap, backpack_mark, backpack_trim) else bone)
 
-    head = add_sphere("Dash_Head", (0, -0.035, 2.02), (0.36, 0.31, 0.42), mats["skin"], subdivisions=3)
-    hair_cap = add_sphere("Dash_HairCap", (0, 0.015, 2.20), (0.39, 0.32, 0.25), mats["hair"], subdivisions=2)
-    parent_to_bone(head, armature, "head")
-    parent_to_bone(hair_cap, armature, "head")
-    for index, x in enumerate((-0.25, -0.1, 0.08, 0.24)):
-        bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=0.11, radius2=0.025, depth=0.34, location=(x, -0.035 + abs(x) * 0.12, 2.43 - abs(x) * 0.2), rotation=(math.radians(-13), math.radians(x * 70), math.radians(x * 20)))
-        tuft = bpy.context.object
-        tuft.name = f"Dash_HairTuft_{index}"
-        tuft.data.materials.append(mats["hair"])
-        parent_to_bone(tuft, armature, "head")
-    for side, x in (("L", -0.145), ("R", 0.145)):
-        eye = add_sphere(f"Dash_Eye_{side}", (x, -0.305, 2.075), (0.075, 0.032, 0.048), mats["white"], subdivisions=2)
-        brow = add_box(f"Dash_Brow_{side}", (x, -0.338, 2.16), (0.19, 0.035, 0.045), mats["hair"], bevel=0.015, rotation=(0, math.radians(side == "L" and -8 or 8), math.radians(side == "L" and -8 or 8)))
-        parent_to_bone(eye, armature, "head")
-        parent_to_bone(brow, armature, "head")
+    sling = add_box(
+        "Dash_DeliverySling",
+        (0.0, -0.31, 1.48),
+        (0.085, 0.055, 0.92),
+        mats["panel"],
+        bevel=0.025,
+        rotation=(0, math.radians(-31), 0),
+    )
+    carabiner = add_dash_torus(
+        "Dash_GoldCarabiner",
+        (0.245, -0.35, 1.25),
+        0.105,
+        0.024,
+        mats["gold"],
+        rotation=(math.radians(90), 0, math.radians(-20)),
+    )
+    skin_to_bone(sling, armature, "spine")
+    skin_to_bone(carabiner, armature, "spine")
+
+    for side, x in (("L", -0.19), ("R", 0.19)):
+        coat_tail = add_box(
+            f"Dash_CoatTail_{side}",
+            (x, 0.1, 0.88),
+            (0.29, 0.18, 0.78),
+            mats["jacket"],
+            bevel=0.055,
+            rotation=(math.radians(-5), math.radians(side == "L" and -4 or 4), 0),
+        )
+        skin_to_bone(coat_tail, armature, f"coat_tail.{side}")
+
+    head = add_sphere("Dash_Head", (0, -0.035, 2.05), (0.265, 0.235, 0.31), mats["skin"], subdivisions=3)
+    hair_cap = add_sphere("Dash_HairCap", (0, 0.015, 2.18), (0.29, 0.25, 0.19), mats["hair"], subdivisions=2)
+    hood = add_sphere("Dash_Hood", (0, 0.105, 1.96), (0.32, 0.235, 0.25), mats["jacket"], subdivisions=3)
+    hood_rim = add_dash_torus(
+        "Dash_HoodRim",
+        (0, -0.05, 2.02),
+        0.232,
+        0.022,
+        mats["cyan"],
+        rotation=(math.radians(90), 0, 0),
+    )
+    skin_to_bone(head, armature, "head")
+    skin_to_bone(hair_cap, armature, "head")
+    skin_to_bone(hood, armature, "head", blend_bone="spine", blend_from="start", blend_maximum=0.38)
+    skin_to_bone(hood_rim, armature, "head", blend_bone="spine", blend_from="start", blend_maximum=0.26)
+    # Soft swept locks preserve the D01 silhouette without reading as a crown
+    # of mechanical spikes from the third-person chase camera.
+    hair_locks = (
+        (-0.19, 2.26, 0.085, 0.18, -34),
+        (-0.09, 2.31, 0.095, 0.205, -22),
+        (0.02, 2.33, 0.10, 0.22, -10),
+        (0.12, 2.30, 0.095, 0.20, 14),
+        (0.20, 2.24, 0.08, 0.17, 30),
+    )
+    for index, (x, z, width, length, tilt) in enumerate(hair_locks):
+        lock = add_sphere(
+            f"Dash_HairLock_{index}",
+            (x, -0.01 + abs(x) * 0.08, z),
+            (width, 0.12, length),
+            mats["hair"],
+            subdivisions=2,
+        )
+        lock.rotation_euler[1] = math.radians(tilt)
+        skin_to_bone(lock, armature, "head")
+    for side, x in (("L", -0.112), ("R", 0.112)):
+        eye = add_sphere(f"Dash_Eye_{side}", (x, -0.231, 2.075), (0.048, 0.025, 0.034), mats["white"], subdivisions=2)
+        brow = add_box(f"Dash_Brow_{side}", (x, -0.257, 2.13), (0.12, 0.026, 0.03), mats["hair"], bevel=0.011, rotation=(0, math.radians(side == "L" and -8 or 8), math.radians(side == "L" and -8 or 8)))
+        skin_to_bone(eye, armature, "head")
+        skin_to_bone(brow, armature, "head")
+    mask = add_box("Dash_Mask", (0, -0.254, 2.0), (0.24, 0.035, 0.105), mats["panel"], bevel=0.03)
+    skin_to_bone(mask, armature, "head")
 
     for side, x, sign in (("L", -0.24, -1), ("R", 0.24, 1)):
-        upper_leg = add_limb(f"Dash_UpperLeg_{side}", (x, 0, 1.0), (x, 0.02, 0.62), 0.16, mats["trouser"], 10)
-        lower_leg = add_limb(f"Dash_LowerLeg_{side}", (x, 0.02, 0.61), (x, -0.02, 0.23), 0.13, mats["trouser"], 10)
-        shoe = add_box(f"Dash_Shoe_{side}", (x, -0.17, 0.16), (0.34, 0.52, 0.22), mats["shoe"], bevel=0.08)
-        sole = add_box(f"Dash_Sole_{side}", (x, -0.2, 0.055), (0.36, 0.56, 0.07), mats["magenta"], bevel=0.025)
-        parent_to_bone(upper_leg, armature, f"upper_leg.{side}")
-        parent_to_bone(lower_leg, armature, f"lower_leg.{side}")
-        parent_to_bone(shoe, armature, f"foot.{side}")
-        parent_to_bone(sole, armature, f"foot.{side}")
-        upper_arm = add_limb(f"Dash_UpperArm_{side}", (sign * 0.52, 0, 1.6), (sign * 0.62, 0, 1.25), 0.12, mats["jacket"], 10)
-        lower_arm = add_limb(f"Dash_LowerArm_{side}", (sign * 0.62, 0, 1.24), (sign * 0.56, -0.04, 0.91), 0.105, mats["panel"], 10)
-        hand = add_sphere(f"Dash_Hand_{side}", (sign * 0.56, -0.045, 0.84), (0.125, 0.105, 0.14), mats["skin"], subdivisions=2)
-        parent_to_bone(upper_arm, armature, f"upper_arm.{side}")
-        parent_to_bone(lower_arm, armature, f"lower_arm.{side}")
-        parent_to_bone(hand, armature, f"lower_arm.{side}")
+        upper_leg = add_limb(f"Dash_UpperLeg_{side}", (x, 0, 1.0), (x, 0.02, 0.62), 0.135, mats["trouser"], 10)
+        lower_leg = add_limb(f"Dash_LowerLeg_{side}", (x, 0.02, 0.61), (x, -0.02, 0.23), 0.11, mats["trouser"], 10)
+        knee = add_sphere(f"Dash_Knee_{side}", (x, -0.015, 0.61), (0.15, 0.13, 0.14), mats["panel"], subdivisions=2)
+        shoe = add_box(f"Dash_Shoe_{side}", (x, -0.16, 0.16), (0.29, 0.46, 0.20), mats["shoe"], bevel=0.07)
+        sole = add_box(f"Dash_Sole_{side}", (x, -0.185, 0.06), (0.31, 0.49, 0.06), mats["magenta"], bevel=0.022)
+        heel_light = add_box(f"Dash_HeelLight_{side}", (x, 0.075, 0.16), (0.2, 0.035, 0.085), mats["cyan"], bevel=0.02)
+        skin_to_bone(upper_leg, armature, f"upper_leg.{side}", blend_bone=f"lower_leg.{side}", blend_from="end")
+        skin_to_bone(lower_leg, armature, f"lower_leg.{side}", blend_bone=f"upper_leg.{side}", blend_from="start")
+        skin_to_bone(knee, armature, f"lower_leg.{side}")
+        skin_to_bone(shoe, armature, f"foot.{side}")
+        skin_to_bone(sole, armature, f"foot.{side}")
+        skin_to_bone(heel_light, armature, f"foot.{side}")
+        upper_arm = add_limb(f"Dash_UpperArm_{side}", (sign * 0.46, 0, 1.62), (sign * 0.56, 0, 1.26), 0.10, mats["jacket"], 10)
+        lower_arm = add_limb(f"Dash_LowerArm_{side}", (sign * 0.56, 0, 1.25), (sign * 0.51, -0.04, 0.90), 0.09, mats["panel"], 10)
+        shoulder = add_sphere(f"Dash_Shoulder_{side}", (sign * 0.45, 0, 1.64), (0.15, 0.13, 0.16), mats["jacket"], subdivisions=2)
+        hand = add_sphere(f"Dash_Hand_{side}", (sign * 0.51, -0.045, 0.83), (0.105, 0.09, 0.12), mats["skin"], subdivisions=2)
+        skin_to_bone(upper_arm, armature, f"upper_arm.{side}", blend_bone=f"lower_arm.{side}", blend_from="end")
+        skin_to_bone(lower_arm, armature, f"lower_arm.{side}", blend_bone=f"upper_arm.{side}", blend_from="start")
+        skin_to_bone(shoulder, armature, f"upper_arm.{side}")
+        skin_to_bone(hand, armature, f"lower_arm.{side}")
+
+        if side == "L":
+            phone = add_box(
+                "Dash_RoutePhone",
+                (sign * 0.57, -0.16, 0.82),
+                (0.18, 0.055, 0.32),
+                mats["panel"],
+                bevel=0.035,
+                rotation=(math.radians(-12), math.radians(-8), math.radians(-8)),
+            )
+            phone_screen = add_box(
+                "Dash_RoutePhoneScreen",
+                (sign * 0.57, -0.193, 0.82),
+                (0.125, 0.018, 0.23),
+                mats["cyan"],
+                bevel=0.018,
+                rotation=(math.radians(-12), math.radians(-8), math.radians(-8)),
+            )
+            skin_to_bone(phone, armature, "lower_arm.L")
+            skin_to_bone(phone_screen, armature, "lower_arm.L")
+
+
+def consolidate_dash_meshes(armature: bpy.types.Object) -> tuple[bpy.types.Object, int]:
+    """Batch Dash into one skinned object without changing its rig contract.
+
+    The authored pieces deliberately overlap to make a smooth stylised courier
+    silhouette. Joining them before export preserves every vertex group,
+    material boundary and armature weight while collapsing dozens of scene
+    nodes into a single skinned draw object. A later sculpt can replace this
+    geometry without changing the skeleton or the thirteen animation names.
+    """
+    meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    if not meshes:
+        raise RuntimeError("Dash generation produced no skinned meshes")
+    source_count = len(meshes)
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in meshes:
+        obj.select_set(True)
+    active = next((obj for obj in meshes if obj.name == "Dash_Torso"), meshes[0])
+    bpy.context.view_layer.objects.active = active
+    bpy.ops.object.join()
+    active.name = "Dash_ProductionMesh"
+    active.parent = armature
+    active["assetId"] = "character.dash.mesh"
+    active["dashSkinned"] = True
+    active["sourceMeshParts"] = source_count
+    bpy.context.view_layer.objects.active = active
+    try:
+        bpy.ops.object.material_slot_remove_unused()
+    except RuntimeError:
+        pass
+    return active, source_count
 
 
 def reset_dash_pose(armature: bpy.types.Object) -> None:
@@ -683,6 +885,62 @@ def key_dash_pose(
         pose_bone.keyframe_insert(data_path="location", frame=frame, group=pose_bone.name)
 
 
+def dash_secondary_motion(action_name: str, phase: float) -> dict[str, tuple[float, float, float]]:
+    """Author deterministic overlap for Dash's soft accessories.
+
+    The animation remains gameplay-event driven; these controls only add
+    readable follow-through to the delivery bag and coat silhouette.
+    """
+    cycle = math.sin(phase * math.tau)
+    counter_cycle = math.sin(phase * math.tau + math.pi)
+    if action_name == "Dash_Idle":
+        return {
+            "delivery_bag": (cycle * 1.2, 0, counter_cycle * 0.8),
+            "coat_tail.L": (3 + cycle * 1.5, 0, cycle * 1.2),
+            "coat_tail.R": (3 + counter_cycle * 1.5, 0, counter_cycle * 1.2),
+        }
+    if action_name in {"Dash_Run", "Dash_Start", "Dash_Stop"}:
+        return {
+            "delivery_bag": (-5 + abs(cycle) * 4, 0, cycle * 5),
+            "coat_tail.L": (16 + abs(cycle) * 10, 0, cycle * 8),
+            "coat_tail.R": (16 + abs(counter_cycle) * 10, 0, counter_cycle * 8),
+        }
+    if action_name == "Dash_Jump":
+        lift = math.sin(min(1.0, phase) * math.pi)
+        return {
+            "delivery_bag": (-8 - lift * 10, 0, cycle * 3),
+            "coat_tail.L": (15 + lift * 24, 0, -5),
+            "coat_tail.R": (15 + lift * 24, 0, 5),
+        }
+    if action_name == "Dash_Slide":
+        compression = math.sin(min(1.0, phase) * math.pi)
+        return {
+            "delivery_bag": (8 + compression * 18, 0, 0),
+            "coat_tail.L": (28 + compression * 18, 0, -8),
+            "coat_tail.R": (28 + compression * 18, 0, 8),
+        }
+    if action_name in {"Dash_Dodge_L", "Dash_Turn_L"}:
+        lean = math.sin(min(1.0, phase) * math.pi)
+        return {
+            "delivery_bag": (-3, 0, -12 * lean),
+            "coat_tail.L": (12 + 9 * lean, 0, -14 * lean),
+            "coat_tail.R": (12 + 5 * lean, 0, -8 * lean),
+        }
+    if action_name in {"Dash_Dodge_R", "Dash_Turn_R"}:
+        lean = math.sin(min(1.0, phase) * math.pi)
+        return {
+            "delivery_bag": (-3, 0, 12 * lean),
+            "coat_tail.L": (12 + 5 * lean, 0, 8 * lean),
+            "coat_tail.R": (12 + 9 * lean, 0, 14 * lean),
+        }
+    impact = math.sin(min(1.0, phase) * math.pi)
+    return {
+        "delivery_bag": (-2 + impact * 9, 0, cycle * 4),
+        "coat_tail.L": (8 + impact * 14, 0, cycle * 5),
+        "coat_tail.R": (8 + impact * 14, 0, counter_cycle * 5),
+    }
+
+
 def create_action(
     armature: bpy.types.Object,
     name: str,
@@ -692,8 +950,13 @@ def create_action(
     action.use_fake_user = True
     armature.animation_data_create()
     armature.animation_data.action = action
+    first_frame = frames[0][0]
+    last_frame = frames[-1][0]
+    duration = max(1, last_frame - first_frame)
     for frame, rotations, locations in frames:
-        key_dash_pose(armature, frame, rotations, locations)
+        phase = (frame - first_frame) / duration
+        enriched_rotations = {**dash_secondary_motion(name, phase), **rotations}
+        key_dash_pose(armature, frame, enriched_rotations, locations)
     if hasattr(action, "fcurves"):
         for curve in action.fcurves:
             for point in curve.keyframe_points:
@@ -793,12 +1056,17 @@ def build_dash() -> None:
     reset_scene()
     armature = create_dash_armature()
     build_dash_mesh(armature)
+    _, source_mesh_parts = consolidate_dash_meshes(armature)
     animation_names = build_dash_actions(armature)
     output = DASH_ROOT / "dash.glb"
     export_glb(output, animations=True)
     character_report = asset_report(output, role="character.dash", lod="production")
     character_report["animations"] = animation_names
     character_report["bones"] = len(armature.data.bones)
+    character_report["rigType"] = "armature-skin"
+    character_report["sourceMeshParts"] = source_mesh_parts
+    character_report["batchedForRuntime"] = True
+    character_report["secondaryBones"] = ["delivery_bag", "coat_tail.L", "coat_tail.R"]
     REPORT["character"] = character_report
 
 
@@ -833,9 +1101,21 @@ def export_glb(path: Path, *, animations: bool) -> None:
 def asset_report(path: Path, *, role: str, lod: str) -> dict[str, object]:
     objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
     triangles = 0
+    skinned_meshes = 0
+    material_primitives = 0
+    weighted_vertices = 0
+    maximum_influences = 0
     for obj in objects:
         obj.data.calc_loop_triangles()
         triangles += len(obj.data.loop_triangles)
+        material_primitives += len({polygon.material_index for polygon in obj.data.polygons})
+        if any(modifier.type == "ARMATURE" for modifier in obj.modifiers):
+            skinned_meshes += 1
+        for vertex in obj.data.vertices:
+            influence_count = len(vertex.groups)
+            if influence_count > 0:
+                weighted_vertices += 1
+            maximum_influences = max(maximum_influences, influence_count)
     return {
         "role": role,
         "lod": lod,
@@ -843,6 +1123,10 @@ def asset_report(path: Path, *, role: str, lod: str) -> dict[str, object]:
         "bytes": path.stat().st_size,
         "meshObjects": len(objects),
         "triangles": triangles,
+        "skinnedMeshObjects": skinned_meshes,
+        "materialPrimitives": material_primitives,
+        "weightedVertices": weighted_vertices,
+        "maximumInfluences": maximum_influences,
     }
 
 
@@ -853,7 +1137,7 @@ def create_texture_maps() -> None:
         "neon-glass": ((0.02, 0.16, 0.21), 0.22, (0.0, 0.52, 0.72)),
         "rooftop-metal": ((0.035, 0.06, 0.08), 0.4, (0.0, 0.08, 0.1)),
     }
-    size = 128
+    size = 512
     for slug, (base, roughness, emissive) in definitions.items():
         outputs: dict[str, str] = {}
         for map_name in ("albedo", "normal", "roughness", "emissive"):
@@ -861,16 +1145,34 @@ def create_texture_maps() -> None:
             pixels: list[float] = []
             for y in range(size):
                 for x in range(size):
-                    noise = (math.sin(x * 1.71 + y * 2.37) + math.sin(x * 0.31 - y * 0.47)) * 0.018
+                    u = x / size
+                    v = y / size
+                    fine = math.sin(x * 1.71 + y * 2.37) * .011 + math.sin(x * .31 - y * .47) * .009
+                    broad = math.sin(u * math.tau * 5.0 + math.sin(v * 11.0)) * .018 + math.sin(v * math.tau * 3.0) * .012
+                    grain = math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+                    grain = (grain - math.floor(grain) - .5) * .024
+                    pattern = fine + broad + grain
+                    if slug == "wet-asphalt":
+                        aggregate = .035 if grain > .0115 else 0.0
+                        repair = -.028 if .31 < u < .63 and .42 < v < .68 else 0.0
+                        pattern += aggregate + repair
+                    elif slug == "city-concrete":
+                        seam = -.055 if x % 192 < 3 or y % 160 < 3 else 0.0
+                        rain_streak = -.018 * max(0.0, math.sin(u * 46.0 + v * 3.0)) * v
+                        pattern += seam + rain_streak
+                    elif slug == "rooftop-metal":
+                        pattern += .026 if y % 48 < 3 else -.008 * max(0.0, math.sin(v * 90.0))
+                    elif slug == "neon-glass":
+                        pattern += .014 * math.sin(u * math.tau * 8.0) - .012 * v
                     if map_name == "albedo":
-                        values = tuple(max(0.0, min(1.0, value + noise)) for value in base)
+                        values = tuple(max(0.0, min(1.0, value + pattern)) for value in base)
                     elif map_name == "normal":
-                        values = (0.5 + noise * 0.3, 0.5 - noise * 0.2, 1.0)
+                        values = (0.5 + pattern * 1.5, 0.5 - pattern * 1.15, 1.0)
                     elif map_name == "roughness":
-                        value = max(0.0, min(1.0, roughness + noise * 1.8))
+                        value = max(0.0, min(1.0, roughness + pattern * 2.2))
                         values = (value, value, value)
                     else:
-                        band = 1.0 if slug == "neon-glass" and (x // 16 + y // 16) % 7 == 0 else 0.18
+                        band = 1.0 if slug == "neon-glass" and (x // 64 + y // 64) % 7 == 0 else 0.12
                         values = tuple(value * band for value in emissive)
                     pixels.extend((*values, 1.0))
             image.pixels.foreach_set(pixels)
@@ -885,6 +1187,17 @@ def create_texture_maps() -> None:
 
 def main() -> None:
     ensure_directories()
+    if "--dash-only" in sys.argv:
+        build_dash()
+        existing_report: dict[str, object] = {}
+        if REPORT_PATH.exists():
+            existing_report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+        existing_report["generator"] = REPORT["generator"]
+        existing_report["blenderVersion"] = REPORT["blenderVersion"]
+        existing_report["character"] = REPORT["character"]
+        REPORT_PATH.write_text(json.dumps(existing_report, indent=2) + "\n", encoding="utf-8")
+        print(f"Generated Dash production asset at {DASH_ROOT}")
+        return
     create_texture_maps()
     for role in ROLES:
         for lod in LOD_DETAIL:

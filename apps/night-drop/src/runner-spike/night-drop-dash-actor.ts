@@ -18,6 +18,9 @@ export interface NightDropDashMotionFrame {
   readonly hitStrength: number;
   readonly clearStrength: number;
   readonly runningBlend: number;
+  readonly speedEnergy: number;
+  readonly turnLean: number;
+  readonly landingStrength: number;
 }
 
 export interface NightDropDashAssetStatus {
@@ -44,6 +47,21 @@ export class NightDropDashActor {
   constructor() {
     this.root.name = "dash-actor";
     this.root.userData.assetRole = "character.dash";
+    const contactShadow = new THREE.Mesh(
+      new THREE.CircleGeometry(.62, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: .34,
+        depthWrite: false,
+      }),
+    );
+    contactShadow.name = "dash-contact-shadow";
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.set(0, .018, .08);
+    contactShadow.scale.set(1, 1.38, 1);
+    contactShadow.renderOrder = 2;
+    this.root.add(contactShadow);
     this.proxy.scale.setScalar(1);
     this.parts = this.proxy.userData.parts as NightDropDashParts;
     this.root.add(this.proxy);
@@ -89,7 +107,13 @@ export class NightDropDashActor {
     if (this.production) {
       const role = resolveProductionAnimation(frame);
       this.playProductionAnimation(role, .12);
+      const active = this.production.actions[role];
+      if (active) active.setEffectiveTimeScale(animationTimeScale(role, frame.speedEnergy));
       this.production.mixer.update(Math.max(0, Math.min(.1, frame.frameDeltaMs / 1_000)));
+      this.production.anchoredNodes.forEach(({ node, position }) => node.position.copy(position));
+      this.production.root.rotation.z = frame.turnLean + frame.dodgeLean * .34;
+      this.production.root.rotation.x = frame.moving ? -.035 - frame.speedEnergy * .035 : 0;
+      this.production.root.position.y = -frame.landingStrength * .045;
       return;
     }
     this.parts.leftLeg.rotation.x = frame.stride * .72;
@@ -98,10 +122,12 @@ export class NightDropDashActor {
     this.parts.rightArm.rotation.x = frame.stride * .58;
     this.parts.torso.rotation.z = (frame.moving ? frame.stride * .025 : 0)
       + frame.dodgeLean
+      + frame.turnLean
       + frame.hitStrength * Math.sin(frame.elapsedMs * .07) * .12;
+    this.parts.torso.rotation.x = frame.moving ? -.04 - frame.speedEnergy * .05 + frame.landingStrength * .08 : 0;
     this.parts.backpack.rotation.z = frame.moving ? -frame.stride * .03 : 0;
     this.parts.head.rotation.y = frame.moving ? Math.sin(frame.elapsedMs * .0065) * .035 : -.06;
-    this.parts.head.rotation.z = frame.dodgeLean * .18 + frame.hitStrength * Math.sin(frame.elapsedMs * .08) * .05;
+    this.parts.head.rotation.z = frame.dodgeLean * .18 - frame.turnLean * .38 + frame.hitStrength * Math.sin(frame.elapsedMs * .08) * .05;
     this.parts.hair.rotation.x = frame.moving ? -.05 - Math.abs(frame.stride) * .045 : 0;
     this.parts.jacketTail.rotation.x = frame.moving
       ? .16 + Math.abs(frame.stride) * .16 + frame.runningBlend * .08
@@ -153,4 +179,13 @@ function resolveProductionAnimation(frame: NightDropDashMotionFrame): NightDropD
 
 function isOneShot(role: NightDropDashAnimationRole): boolean {
   return !["idle", "run"].includes(role);
+}
+
+function animationTimeScale(role: NightDropDashAnimationRole, speedEnergy: number): number {
+  if (role === "run") return .92 + speedEnergy * .34;
+  if (role === "start") return 1.08;
+  if (role === "jump" || role === "slide") return 1.04;
+  if (role === "stumble") return 1.12;
+  if (role === "idle") return .88;
+  return 1;
 }

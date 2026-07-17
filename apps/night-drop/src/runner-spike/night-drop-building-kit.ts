@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { NightDropDistrictId } from "./night-drop-districts.js";
+import { createNightDropPbrMaterial } from "./night-drop-pbr-materials.js";
 
 export type NightDropBuildingArchetype = "glasshouse" | "night-market" | "service-block" | "stacked-flats";
 export type NightDropRoofTreatment = "crown" | "hvac" | "water-tank" | "antenna";
@@ -59,6 +60,12 @@ export function createNightDropBuilding(spec: NightDropBuildingSpec): THREE.Grou
   root.userData.archetype = descriptor.archetype;
   root.userData.district = spec.district ?? "unassigned";
   root.userData.productionKit = "night-drop-city-v2";
+  root.userData.cameraOccluder = true;
+  root.userData.cameraClearanceRadius = Math.hypot(spec.width, spec.depth) * .5;
+  root.userData.desiredWidth = spec.width;
+  root.userData.desiredDepth = spec.depth;
+  root.userData.desiredHeight = spec.height;
+  root.userData.cityVariant = spec.index % 2 === 0 ? "a" : "b";
 
   const palette = paletteFor(descriptor.archetype);
   const shell = box(
@@ -241,10 +248,10 @@ function addNightFrontage(
     "pavement-frontage",
     spec.width + .6,
     .14,
-    4.2,
+    2.1,
     material(`pavement-${descriptor.archetype}`, palette.pavement, 0x07131b, .015, .82, .12),
   );
-  pavement.position.set(0, .07, spec.depth / 2 + 2.1);
+  pavement.position.set(0, .07, spec.depth / 2 + 1.05);
   pavement.receiveShadow = true;
   root.add(pavement);
 
@@ -255,7 +262,7 @@ function addNightFrontage(
     .16,
     material(`kerb-${descriptor.archetype}`, palette.kerb, palette.shellEmissive, .035, .68, .24),
   );
-  kerb.position.set(0, .11, spec.depth / 2 + 4.16);
+  kerb.position.set(0, .11, spec.depth / 2 + 2.06);
   root.add(kerb);
 
   const poolMaterial = new THREE.MeshBasicMaterial({
@@ -269,7 +276,7 @@ function addNightFrontage(
   pool.name = "door-light-pool";
   pool.rotation.x = -Math.PI / 2;
   pool.scale.set(1.45, .82, 1);
-  pool.position.set(0, .155, spec.depth / 2 + 2.15);
+  pool.position.set(0, .155, spec.depth / 2 + 1.15);
   root.add(pool);
 }
 
@@ -376,7 +383,24 @@ function material(
 ): THREE.MeshStandardMaterial {
   const cached = materialCache.get(key);
   if (cached) return cached;
-  const created = new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity, roughness, metalness });
+  const surface = key.startsWith("roof-") || key.includes("hvac") || key.includes("pipe") || key.includes("balcony")
+    ? "nd.material.rooftop-metal"
+    : key.includes("entrance") || key.includes("shop-") || key.includes("awning") || key.includes("strip-")
+      ? "nd.material.neon-glass"
+      : "nd.material.city-concrete";
+  const created = createNightDropPbrMaterial(surface, {
+    repeat: surface === "nd.material.city-concrete" ? [2, 3] : [1, 1],
+    color: new THREE.Color(color)
+      .lerp(new THREE.Color(0xffffff), surface === "nd.material.city-concrete" ? .64 : .46)
+      .getHex(),
+    emissive: surface === "nd.material.city-concrete"
+      ? new THREE.Color(emissive).lerp(new THREE.Color(0x223441), .7).getHex()
+      : emissive,
+    emissiveIntensity: surface === "nd.material.city-concrete" ? Math.max(.2, emissiveIntensity) : emissiveIntensity,
+    emissiveTexture: surface === "nd.material.neon-glass",
+    roughness,
+    metalness,
+  });
   materialCache.set(key, created);
   return created;
 }

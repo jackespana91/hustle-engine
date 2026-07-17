@@ -9,7 +9,17 @@ export interface NightDropRunnerEffectsFrame {
   readonly runningBlend: number;
   readonly clearStrength: number;
   readonly hitStrength: number;
+  readonly shortcutStrength: number;
+  readonly dangerStrength: number;
+  readonly celebrationStrength: number;
   readonly compact: boolean;
+}
+
+interface BurstField {
+  readonly points: THREE.Points;
+  readonly geometry: THREE.BufferGeometry;
+  readonly material: THREE.PointsMaterial;
+  readonly seeds: readonly number[];
 }
 
 export class NightDropRunnerEffects {
@@ -19,6 +29,10 @@ export class NightDropRunnerEffects {
   private readonly speedSeeds: readonly number[];
   private readonly footsteps: readonly THREE.Mesh[];
   private readonly collectionRing: THREE.Mesh;
+  private readonly shortcutBurst: BurstField;
+  private readonly dangerBurst: BurstField;
+  private readonly celebrationBurst: BurstField;
+  private readonly featureRing: THREE.Mesh;
   private readonly impactLight = new THREE.PointLight(0x40f8ff, 0, 9, 2);
   private readonly lookTarget = new THREE.Vector3();
 
@@ -81,6 +95,27 @@ export class NightDropRunnerEffects {
     this.collectionRing.position.y = 1.15;
     this.root.add(this.collectionRing);
 
+    const burstCount = lod === "low" ? 14 : lod === "medium" ? 24 : 36;
+    this.shortcutBurst = createBurstField("shortcut-burst", 0x54f8ff, burstCount, lod === "low" ? .08 : .1);
+    this.dangerBurst = createBurstField("danger-burst", 0xff385f, burstCount, lod === "low" ? .085 : .11);
+    this.celebrationBurst = createBurstField("celebration-burst", 0xffd84a, burstCount + 8, lod === "low" ? .095 : .125);
+    this.root.add(this.shortcutBurst.points, this.dangerBurst.points, this.celebrationBurst.points);
+
+    this.featureRing = new THREE.Mesh(
+      new THREE.TorusGeometry(1.05, .035, 8, 44),
+      new THREE.MeshBasicMaterial({
+        color: 0x54f8ff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    this.featureRing.name = "feature-energy-ring";
+    this.featureRing.rotation.x = Math.PI / 2;
+    this.featureRing.position.y = .08;
+    this.root.add(this.featureRing);
+
     this.impactLight.position.y = 1.25;
     this.root.add(this.impactLight);
   }
@@ -111,8 +146,63 @@ export class NightDropRunnerEffects {
     this.collectionRing.scale.setScalar(1 + (1 - frame.clearStrength) * 1.8);
     this.collectionRing.rotation.z = frame.elapsedMs * .004;
     this.impactLight.color.setHex(frame.hitStrength > frame.clearStrength ? 0xff315e : 0x40f8ff);
-    this.impactLight.intensity = frame.hitStrength * 24 + frame.clearStrength * 14;
+    this.impactLight.intensity = frame.hitStrength * 24 + frame.clearStrength * 14
+      + frame.shortcutStrength * 9 + frame.dangerStrength * 13 + frame.celebrationStrength * 18;
+
+    updateBurstField(this.shortcutBurst, frame.elapsedMs, frame.shortcutStrength, 3.4, .0011);
+    updateBurstField(this.dangerBurst, frame.elapsedMs, frame.dangerStrength, 2.7, .00145);
+    updateBurstField(this.celebrationBurst, frame.elapsedMs, frame.celebrationStrength, 4.4, .00082);
+    const ringStrength = Math.max(frame.shortcutStrength, frame.dangerStrength, frame.celebrationStrength);
+    const featureMaterial = this.featureRing.material as THREE.MeshBasicMaterial;
+    featureMaterial.color.setHex(frame.dangerStrength > Math.max(frame.shortcutStrength, frame.celebrationStrength)
+      ? 0xff385f
+      : frame.celebrationStrength > frame.shortcutStrength ? 0xffd84a : 0x54f8ff);
+    featureMaterial.opacity = ringStrength * .58;
+    this.featureRing.scale.setScalar(.72 + (1 - ringStrength) * 1.9);
+    this.featureRing.rotation.z = frame.elapsedMs * .0025;
   }
+}
+
+function createBurstField(name: string, color: number, count: number, size: number): BurstField {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  const material = new THREE.PointsMaterial({
+    color,
+    size,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.name = name;
+  return {
+    points,
+    geometry,
+    material,
+    seeds: Array.from({ length: count }, (_, index) => seeded(index * 31 + color * .0001)),
+  };
+}
+
+function updateBurstField(field: BurstField, elapsedMs: number, strength: number, radius: number, speed: number): void {
+  field.material.opacity = strength * .76;
+  field.points.visible = strength > .01;
+  if (!field.points.visible) return;
+  const positions = field.geometry.getAttribute("position") as THREE.BufferAttribute;
+  for (let index = 0; index < positions.count; index += 1) {
+    const seed = field.seeds[index]!;
+    const cycle = wrap(elapsedMs * speed + seed, 1);
+    const angle = seed * Math.PI * 12 + cycle * 1.8;
+    const spread = (.3 + cycle * radius) * (.55 + seeded(index * 17) * .45);
+    positions.setXYZ(
+      index,
+      Math.cos(angle) * spread,
+      .28 + cycle * (1.7 + seeded(index * 23) * 2.4),
+      Math.sin(angle) * spread,
+    );
+  }
+  positions.needsUpdate = true;
 }
 
 function seeded(value: number): number {

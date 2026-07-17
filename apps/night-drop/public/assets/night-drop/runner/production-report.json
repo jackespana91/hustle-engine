@@ -1,5 +1,5 @@
 {
-  "generator": "night-drop-blender-production-v1",
+  "generator": "night-drop-blender-production-v3",
   "blenderVersion": "5.2.0 LTS",
   "environment": [
     {
@@ -295,9 +295,13 @@
     "role": "character.dash",
     "lod": "production",
     "path": "assets/night-drop/runner/characters/dash/dash.glb",
-    "bytes": 375472,
-    "meshObjects": 30,
-    "triangles": 3024,
+    "bytes": 828108,
+    "meshObjects": 1,
+    "triangles": 12424,
+    "skinnedMeshObjects": 1,
+    "materialPrimitives": 10,
+    "weightedVertices": 6312,
+    "maximumInfluences": 2,
     "animations": [
       "Dash_Idle",
       "Dash_Start",
@@ -313,7 +317,15 @@
       "Dash_Stumble",
       "Dash_Celebrate"
     ],
-    "bones": 14
+    "bones": 17,
+    "rigType": "armature-skin",
+    "sourceMeshParts": 52,
+    "batchedForRuntime": true,
+    "secondaryBones": [
+      "delivery_bag",
+      "coat_tail.L",
+      "coat_tail.R"
+    ]
   },
   "materials": [
     {

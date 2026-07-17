@@ -1,0 +1,114 @@
+{
+  "generator": "night-drop-curve-safe-city-kit-v2",
+  "blenderVersion": "5.2.0 LTS",
+  "assets": [
+    {
+      "role": "city.glasshouse.a",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/glasshouse_a.glb",
+      "bytes": 377084,
+      "meshObjects": 5,
+      "triangles": 5292,
+      "archetype": "glasshouse",
+      "variant": "a",
+      "baseWidth": 8.0,
+      "baseDepth": 6.4,
+      "baseHeight": 15.0
+    },
+    {
+      "role": "city.glasshouse.b",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/glasshouse_b.glb",
+      "bytes": 334348,
+      "meshObjects": 5,
+      "triangles": 4704,
+      "archetype": "glasshouse",
+      "variant": "b",
+      "baseWidth": 7.2,
+      "baseDepth": 6.0,
+      "baseHeight": 12.5
+    },
+    {
+      "role": "city.night-market.a",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/night-market_a.glb",
+      "bytes": 369576,
+      "meshObjects": 5,
+      "triangles": 5184,
+      "archetype": "night-market",
+      "variant": "a",
+      "baseWidth": 9.0,
+      "baseDepth": 6.8,
+      "baseHeight": 10.5
+    },
+    {
+      "role": "city.night-market.b",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/night-market_b.glb",
+      "bytes": 410020,
+      "meshObjects": 5,
+      "triangles": 5784,
+      "archetype": "night-market",
+      "variant": "b",
+      "baseWidth": 7.8,
+      "baseDepth": 6.2,
+      "baseHeight": 12.0
+    },
+    {
+      "role": "city.service-block.a",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/service-block_a.glb",
+      "bytes": 213784,
+      "meshObjects": 4,
+      "triangles": 2992,
+      "archetype": "service-block",
+      "variant": "a",
+      "baseWidth": 8.4,
+      "baseDepth": 6.8,
+      "baseHeight": 9.0
+    },
+    {
+      "role": "city.service-block.b",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/service-block_b.glb",
+      "bytes": 193812,
+      "meshObjects": 4,
+      "triangles": 2728,
+      "archetype": "service-block",
+      "variant": "b",
+      "baseWidth": 7.4,
+      "baseDepth": 6.0,
+      "baseHeight": 11.0
+    },
+    {
+      "role": "city.stacked-flats.a",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/stacked-flats_a.glb",
+      "bytes": 528388,
+      "meshObjects": 5,
+      "triangles": 7452,
+      "archetype": "stacked-flats",
+      "variant": "a",
+      "baseWidth": 8.2,
+      "baseDepth": 6.6,
+      "baseHeight": 15.5
+    },
+    {
+      "role": "city.stacked-flats.b",
+      "lod": "shared",
+      "path": "assets/night-drop/runner/city-kit/stacked-flats_b.glb",
+      "bytes": 546160,
+      "meshObjects": 5,
+      "triangles": 7728,
+      "archetype": "stacked-flats",
+      "variant": "b",
+      "baseWidth": 7.4,
+      "baseDepth": 6.2,
+      "baseHeight": 13.5
+    }
+  ],
+  "bundle": {
+    "path": "assets/night-drop/runner/city-kit/night-drop-city-kit.glb",
+    "bytes": 2960908
+  }
+}
