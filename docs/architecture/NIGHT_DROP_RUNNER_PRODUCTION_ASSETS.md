@@ -2,19 +2,20 @@
 
 ## Status
 
-The cinematic runner composition, camera scale, route staging, controls and
-deterministic timing are ready for production assets. The current character,
-buildings, street dressing and feedback tones are intentional fallbacks. They
-keep every route playable when an external file is unavailable; they are not
-final commercial artwork or audio.
+The first Blender-authored production pack is installed and enabled by default.
+It contains a segmented bone-rigged stylised Dash with all thirteen named animation clips, all
+twelve semantic environment modules at three LOD levels, and four shared PBR
+material-map sets. The pack establishes the in-game production pipeline and the
+first Glasshouse Heights visual language; further art-review passes can improve
+character sculpting, facade variety and texture resolution without changing the
+contract.
 
-Production loading is opt-in during integration:
+Use the procedural fallback only for comparison or diagnosis:
 
-`?runnerSpike=1&route=cross-city&assets=production`
+`?runnerSpike=1&route=cross-city&assets=proxy`
 
-The default preview does not request missing production files. A failed
-production load returns to the procedural fallback without changing the route,
-outcome, wallet value or recovery snapshot.
+A failed production load still returns safely to that fallback without changing
+the route, outcome, wallet value or recovery snapshot.
 
 ## Coordinate and export rules
 
@@ -39,9 +40,11 @@ Expected model:
 
 `/assets/night-drop/runner/characters/dash/dash.glb`
 
-The file may use one skinned mesh or a small controlled set of skinned meshes.
-The loader accepts the first listed production clip name or its lowercase
-fallback alias.
+The v1 Blender pack uses a controlled set of bone-parented character segments
+to establish silhouette, costume, timing and integration. A later sculpt can
+replace it with one skinned mesh or a small controlled set of skinned meshes
+without changing the loader. The loader accepts the first listed production
+clip name or its lowercase fallback alias.
 
 | Role | Production clip | Behaviour |
 | --- | --- | --- |
@@ -154,6 +157,14 @@ sound genuinely needs width; the runtime owns spatial placement and gain.
 All files live under `/assets/night-drop/runner/audio/`. The current oscillator
 sounds and restrained haptic patterns are timing placeholders only.
 
+## Reproducible Blender source
+
+The committed generator is
+`apps/night-drop/tools/blender/generate-night_drop_runner_assets.py`. It writes
+only to the Night Drop public runner asset directory and produces a JSON report
+containing file sizes, mesh counts, triangle counts, animation names and bone
+count. Blender 5.2 LTS generated the initial pack.
+
 ## Existing 2D source packages
 
 The approved Night Drop codex PNGs, spritesheets and contact sheets remain valid
@@ -163,12 +174,18 @@ authored runner audio required by this third-person presentation.
 
 ## Performance and QA gate
 
-The procedural fallback currently chooses low LOD at 390×844, medium at
-900×1000 and high at 1440×900. The Full Night Shift mobile sample held 60.0 FPS
-with a 16.67ms average frame, a 17.70ms worst sampled frame, 70 draw calls,
-5,024 rendered triangles and four active streamed segments. These numbers are a
-fallback reference, not permission for production assets to consume the entire
-budget.
+The production pack chooses low LOD at 390×844 and medium on the tested desktop
+profile. Static environment meshes are batched by material during Blender export
+so added facade detail does not create a draw call per object. Cross-City held
+60.0 FPS on the 390×844 profile with a 16.67ms average frame, a 17.50ms worst
+steady frame, 83 draw calls, 24,548 rendered triangles and four active streamed
+segments. Full Night Shift at 4× held 60.0 FPS with 66 draw calls and 21,888
+triangles. The 1440×900 centred stage also held 60.0 FPS after asset loading.
+
+Play is disabled briefly while the selected route's production character and
+environment roles load. The UI exposes a clear loading state, then enables the
+round only after the production pack is ready. The proxy path remains immediate
+for recovery comparison.
 
 Before accepting a production pack:
 
@@ -185,14 +202,14 @@ Before accepting a production pack:
 
 ## External production dependencies
 
-The remaining blockers to a final commercial visual release are deliberately
-outside this code pass:
+The production pipeline is no longer blocked by missing GLBs. Remaining work
+for a top-tier commercial release is iterative rather than architectural:
 
-- approved skinned Dash GLB with the thirteen animation roles;
-- twelve modular environment sets at three LODs each;
-- approved PBR texture/material package and signage atlas;
-- final authored effects, audio mix and voice work;
-- device profiling and art optimisation using the real files.
+- art-direct and refine Dash's face, clothing shapes and deformation quality;
+- expand facade, prop and signage variety beyond the first Glasshouse kit;
+- replace the initial procedural PBR maps with authored high-resolution maps;
+- produce final effects, audio mix and voice work;
+- profile and optimise the approved art on real iOS and Android hardware.
 
-Until those assets arrive, the fallback remains the honest preview of route
-design, timing, camera, controls, recovery and presentation architecture.
+The proxy remains available as a recovery and performance reference, not as the
+default player-facing presentation.

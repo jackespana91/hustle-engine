@@ -97,6 +97,7 @@ export class NightDropRunnerWorld {
   private decisionUiKey = "";
   private reportedObstacleInteractions = 0;
   private disposed = false;
+  private assetReadiness: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -148,10 +149,14 @@ export class NightDropRunnerWorld {
     this.obstacles = this.route.obstacles.map((obstacle) => ({ root: createObstacle(obstacle), obstacle }));
 
     this.buildScene();
-    this.configureProductionAssets(options);
+    this.assetReadiness = this.configureProductionAssets(options);
     window.addEventListener("resize", this.resize);
     this.resize();
     this.updateWorld(0, true);
+  }
+
+  ready(): Promise<void> {
+    return this.assetReadiness;
   }
 
   start(speed = 1): void {
@@ -301,20 +306,22 @@ export class NightDropRunnerWorld {
     };
   }
 
-  private configureProductionAssets(options: NightDropRunnerWorldOptions): void {
+  private async configureProductionAssets(options: NightDropRunnerWorldOptions): Promise<void> {
     const manifest = options.productionManifest ?? NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST;
     validateNightDropRunnerProductionManifest(manifest);
     this.stage.dataset.productionAssets = String(options.productionAssets === true);
     this.stage.dataset.dashAssetMode = this.dashActor.inspect().mode;
     if (!options.productionAssets) return;
     const loader = new NightDropRunnerProductionLoader();
-    void this.dashActor.loadProduction(loader, manifest.character).then((status) => {
-      if (this.disposed) return;
-      this.stage.dataset.dashAssetMode = status.mode;
-      this.stage.dataset.dashAssetFallback = String(Boolean(status.fallbackReason));
-      this.stage.dataset.dashAnimationCount = String(status.availableAnimationRoles.length);
-    });
-    void this.loadProductionEnvironment(loader, manifest);
+    const [status] = await Promise.all([
+      this.dashActor.loadProduction(loader, manifest.character),
+      this.loadProductionEnvironment(loader, manifest),
+    ]);
+    if (this.disposed) return;
+    this.stage.dataset.dashAssetMode = status.mode;
+    this.stage.dataset.dashAssetFallback = String(Boolean(status.fallbackReason));
+    this.stage.dataset.dashAnimationCount = String(status.availableAnimationRoles.length);
+    this.updateWorld(this.elapsedMs, true);
   }
 
   private async loadProductionEnvironment(

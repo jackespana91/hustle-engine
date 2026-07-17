@@ -1,0 +1,360 @@
+{
+  "generator": "night-drop-blender-production-v1",
+  "blenderVersion": "5.2.0 LTS",
+  "environment": [
+    {
+      "role": "street-straight",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/street_straight_lod0.glb",
+      "bytes": 1076220,
+      "meshObjects": 10,
+      "triangles": 15344
+    },
+    {
+      "role": "street-straight",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/street_straight_lod1.glb",
+      "bytes": 742696,
+      "meshObjects": 10,
+      "triangles": 10536
+    },
+    {
+      "role": "street-straight",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/street_straight_lod2.glb",
+      "bytes": 401160,
+      "meshObjects": 9,
+      "triangles": 5616
+    },
+    {
+      "role": "corner-left",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/corner_left_lod0.glb",
+      "bytes": 1136688,
+      "meshObjects": 10,
+      "triangles": 16208
+    },
+    {
+      "role": "corner-left",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/corner_left_lod1.glb",
+      "bytes": 803168,
+      "meshObjects": 10,
+      "triangles": 11400
+    },
+    {
+      "role": "corner-left",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/corner_left_lod2.glb",
+      "bytes": 438952,
+      "meshObjects": 9,
+      "triangles": 6156
+    },
+    {
+      "role": "corner-right",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/corner_right_lod0.glb",
+      "bytes": 1136692,
+      "meshObjects": 10,
+      "triangles": 16208
+    },
+    {
+      "role": "corner-right",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/corner_right_lod1.glb",
+      "bytes": 803168,
+      "meshObjects": 10,
+      "triangles": 11400
+    },
+    {
+      "role": "corner-right",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/corner_right_lod2.glb",
+      "bytes": 438956,
+      "meshObjects": 9,
+      "triangles": 6156
+    },
+    {
+      "role": "t-junction",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/t_junction_lod0.glb",
+      "bytes": 1139528,
+      "meshObjects": 10,
+      "triangles": 16280
+    },
+    {
+      "role": "t-junction",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/t_junction_lod1.glb",
+      "bytes": 806008,
+      "meshObjects": 10,
+      "triangles": 11472
+    },
+    {
+      "role": "t-junction",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/t_junction_lod2.glb",
+      "bytes": 437520,
+      "meshObjects": 9,
+      "triangles": 6156
+    },
+    {
+      "role": "crossroads",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/crossroads_lod0.glb",
+      "bytes": 1139528,
+      "meshObjects": 10,
+      "triangles": 16280
+    },
+    {
+      "role": "crossroads",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/crossroads_lod1.glb",
+      "bytes": 806008,
+      "meshObjects": 10,
+      "triangles": 11472
+    },
+    {
+      "role": "crossroads",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/crossroads_lod2.glb",
+      "bytes": 437520,
+      "meshObjects": 9,
+      "triangles": 6156
+    },
+    {
+      "role": "alley",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/alley_lod0.glb",
+      "bytes": 1076228,
+      "meshObjects": 10,
+      "triangles": 15344
+    },
+    {
+      "role": "alley",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/alley_lod1.glb",
+      "bytes": 742704,
+      "meshObjects": 10,
+      "triangles": 10536
+    },
+    {
+      "role": "alley",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/alley_lod2.glb",
+      "bytes": 401176,
+      "meshObjects": 9,
+      "triangles": 5616
+    },
+    {
+      "role": "bridge",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/bridge_lod0.glb",
+      "bytes": 124828,
+      "meshObjects": 3,
+      "triangles": 1728
+    },
+    {
+      "role": "bridge",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/bridge_lod1.glb",
+      "bytes": 124828,
+      "meshObjects": 3,
+      "triangles": 1728
+    },
+    {
+      "role": "bridge",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/bridge_lod2.glb",
+      "bytes": 79460,
+      "meshObjects": 3,
+      "triangles": 1080
+    },
+    {
+      "role": "tunnel",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/tunnel_lod0.glb",
+      "bytes": 325288,
+      "meshObjects": 6,
+      "triangles": 4536
+    },
+    {
+      "role": "tunnel",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/tunnel_lod1.glb",
+      "bytes": 249672,
+      "meshObjects": 6,
+      "triangles": 3456
+    },
+    {
+      "role": "tunnel",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/tunnel_lod2.glb",
+      "bytes": 134864,
+      "meshObjects": 5,
+      "triangles": 1836
+    },
+    {
+      "role": "ramp-up",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/ramp_up_lod0.glb",
+      "bytes": 1083760,
+      "meshObjects": 10,
+      "triangles": 15452
+    },
+    {
+      "role": "ramp-up",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/ramp_up_lod1.glb",
+      "bytes": 750236,
+      "meshObjects": 10,
+      "triangles": 10644
+    },
+    {
+      "role": "ramp-up",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/ramp_up_lod2.glb",
+      "bytes": 409144,
+      "meshObjects": 10,
+      "triangles": 5724
+    },
+    {
+      "role": "ramp-down",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/ramp_down_lod0.glb",
+      "bytes": 1083768,
+      "meshObjects": 10,
+      "triangles": 15452
+    },
+    {
+      "role": "ramp-down",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/ramp_down_lod1.glb",
+      "bytes": 750240,
+      "meshObjects": 10,
+      "triangles": 10644
+    },
+    {
+      "role": "ramp-down",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/ramp_down_lod2.glb",
+      "bytes": 409148,
+      "meshObjects": 10,
+      "triangles": 5724
+    },
+    {
+      "role": "rooftop",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/rooftop_lod0.glb",
+      "bytes": 56820,
+      "meshObjects": 3,
+      "triangles": 756
+    },
+    {
+      "role": "rooftop",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/rooftop_lod1.glb",
+      "bytes": 56820,
+      "meshObjects": 3,
+      "triangles": 756
+    },
+    {
+      "role": "rooftop",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/rooftop_lod2.glb",
+      "bytes": 41696,
+      "meshObjects": 3,
+      "triangles": 540
+    },
+    {
+      "role": "destination",
+      "lod": "lod0",
+      "path": "assets/night-drop/runner/environment/destination_lod0.glb",
+      "bytes": 171820,
+      "meshObjects": 7,
+      "triangles": 2372
+    },
+    {
+      "role": "destination",
+      "lod": "lod1",
+      "path": "assets/night-drop/runner/environment/destination_lod1.glb",
+      "bytes": 156708,
+      "meshObjects": 7,
+      "triangles": 2156
+    },
+    {
+      "role": "destination",
+      "lod": "lod2",
+      "path": "assets/night-drop/runner/environment/destination_lod2.glb",
+      "bytes": 128088,
+      "meshObjects": 7,
+      "triangles": 1740
+    }
+  ],
+  "character": {
+    "role": "character.dash",
+    "lod": "production",
+    "path": "assets/night-drop/runner/characters/dash/dash.glb",
+    "bytes": 375472,
+    "meshObjects": 30,
+    "triangles": 3024,
+    "animations": [
+      "Dash_Idle",
+      "Dash_Start",
+      "Dash_Run",
+      "Dash_Stop",
+      "Dash_Jump",
+      "Dash_Slide",
+      "Dash_Dodge_L",
+      "Dash_Dodge_R",
+      "Dash_Turn_L",
+      "Dash_Turn_R",
+      "Dash_Collect",
+      "Dash_Stumble",
+      "Dash_Celebrate"
+    ],
+    "bones": 14
+  },
+  "materials": [
+    {
+      "id": "wet-asphalt",
+      "resolution": 128,
+      "maps": {
+        "albedo": "assets/night-drop/runner/materials/wet-asphalt_albedo.webp",
+        "normal": "assets/night-drop/runner/materials/wet-asphalt_normal.webp",
+        "roughness": "assets/night-drop/runner/materials/wet-asphalt_roughness.webp",
+        "emissive": "assets/night-drop/runner/materials/wet-asphalt_emissive.webp"
+      }
+    },
+    {
+      "id": "city-concrete",
+      "resolution": 128,
+      "maps": {
+        "albedo": "assets/night-drop/runner/materials/city-concrete_albedo.webp",
+        "normal": "assets/night-drop/runner/materials/city-concrete_normal.webp",
+        "roughness": "assets/night-drop/runner/materials/city-concrete_roughness.webp",
+        "emissive": "assets/night-drop/runner/materials/city-concrete_emissive.webp"
+      }
+    },
+    {
+      "id": "neon-glass",
+      "resolution": 128,
+      "maps": {
+        "albedo": "assets/night-drop/runner/materials/neon-glass_albedo.webp",
+        "normal": "assets/night-drop/runner/materials/neon-glass_normal.webp",
+        "roughness": "assets/night-drop/runner/materials/neon-glass_roughness.webp",
+        "emissive": "assets/night-drop/runner/materials/neon-glass_emissive.webp"
+      }
+    },
+    {
+      "id": "rooftop-metal",
+      "resolution": 128,
+      "maps": {
+        "albedo": "assets/night-drop/runner/materials/rooftop-metal_albedo.webp",
+        "normal": "assets/night-drop/runner/materials/rooftop-metal_normal.webp",
+        "roughness": "assets/night-drop/runner/materials/rooftop-metal_roughness.webp",
+        "emissive": "assets/night-drop/runner/materials/rooftop-metal_emissive.webp"
+      }
+    }
+  ]
+}

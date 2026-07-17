@@ -25,7 +25,7 @@ const { theme } = createNightDropThemeRuntime();
 applyNightDropTheme(document.documentElement, theme);
 
 const query = new URLSearchParams(window.location.search);
-const productionAssetsEnabled = query.get("assets") === "production";
+const productionAssetsEnabled = query.get("assets") !== "proxy";
 const feedback = new NightDropRunnerFeedbackController();
 const requestedRoute = query.get("route");
 let plan = createNightDropRunnerPlan(isNightDropRunnerRouteId(requestedRoute) ? requestedRoute : DEFAULT_NIGHT_DROP_RUNNER_ROUTE);
@@ -176,7 +176,7 @@ function renderRunner(): string {
 }
 
 function startRound(): void {
-  if (playing) return;
+  if (playing || stage.dataset.assetStatus === "loading") return;
   clearTimers();
   resetRound();
   savedSnapshot = null;
@@ -211,12 +211,13 @@ function resetRound(): void {
   setText("[data-route-meta]", `${plan.routeDifficulty} · ${formatDuration(plan.durationMs)}`);
   setText("[data-moment-kicker]", "DELIVERY 07");
   setText("[data-moment]", "Glasshouse Heights");
-  playButton.disabled = false;
+  const assetsLoading = stage.dataset.assetStatus === "loading";
+  playButton.disabled = assetsLoading;
   routeSelect.disabled = false;
   speedSelect.disabled = false;
-  requiredElement<HTMLElement>(".nr-play strong", playButton, "Play label missing").textContent = "PLAY";
-  requiredElement<HTMLElement>(".nr-play small", playButton, "Play price missing").textContent = "€1 DELIVERY";
-  liveStatus.textContent = "Ready for one deterministic delivery";
+  requiredElement<HTMLElement>(".nr-play strong", playButton, "Play label missing").textContent = assetsLoading ? "LOADING" : "PLAY";
+  requiredElement<HTMLElement>(".nr-play small", playButton, "Play price missing").textContent = assetsLoading ? "PREPARING CITY" : "€1 DELIVERY";
+  liveStatus.textContent = assetsLoading ? "Loading production city…" : "Ready for one deterministic delivery";
 }
 
 function applyBeat(beat: RunnerTimelineBeat, frozen: boolean): void {
@@ -429,10 +430,28 @@ function recoverRound(): void {
 }
 
 function createRunnerWorld(): NightDropRunnerWorld {
-  return new NightDropRunnerWorld(worldCanvas, stage, plan, {
+  const world = new NightDropRunnerWorld(worldCanvas, stage, plan, {
     productionAssets: productionAssetsEnabled,
     onPresentationCue: (cue) => feedback.cue(cue),
   });
+  stage.dataset.assetStatus = productionAssetsEnabled ? "loading" : "ready";
+  playButton.disabled = productionAssetsEnabled;
+  void world.ready().then(() => {
+    if (runnerWorld !== world) return;
+    stage.dataset.assetStatus = "ready";
+    if (playing || stage.dataset.phase !== "idle") return;
+    playButton.disabled = false;
+    requiredElement<HTMLElement>(".nr-play strong", playButton, "Play label missing").textContent = "PLAY";
+    requiredElement<HTMLElement>(".nr-play small", playButton, "Play price missing").textContent = "€1 DELIVERY";
+    liveStatus.textContent = "Ready for one deterministic delivery";
+  }).catch(() => {
+    if (runnerWorld !== world) return;
+    stage.dataset.assetStatus = "fallback";
+    if (playing || stage.dataset.phase !== "idle") return;
+    playButton.disabled = false;
+    liveStatus.textContent = "Production city unavailable — using safe fallback";
+  });
+  return world;
 }
 
 function handleKeyboardInput(event: KeyboardEvent): void {

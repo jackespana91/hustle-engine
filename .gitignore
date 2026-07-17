@@ -6,6 +6,8 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 # Tool caches
 .cache/
