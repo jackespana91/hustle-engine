@@ -120,8 +120,9 @@ The physical streamed city is the environment.
 ### Chase-camera sightline rules
 
 - Treat the route as the primary silhouette. Standard facades begin beyond the
-  full pavement plus a 4.5m visibility setback; the alley uses a smaller 1.8m
-  setback to preserve its deliberate compression.
+  full pavement plus a 4.5m visibility setback; the alley uses a smaller
+  service-pavement setback while keeping every facade outside the playable
+  road and shoulder.
 - Leave visible gaps between neighbouring building shells. A continuous wall
   beside the camera is not an acceptable substitute for city density.
 - Crossroads, T-junctions and corners use dedicated compact corner buildings.
@@ -153,6 +154,38 @@ charcoal or deep plum; warm and cool windows provide occupancy; entrances,
 shops, signs and street lamps add local pools of light; district neon is an
 accent rather than a whole-building wash. No painted background is used. The
 visible city remains physical, route-aware geometry.
+
+### Junction and alley street network
+
+Night Drop does not render a left or right choice as a lateral offset from the
+main road. Each non-straight alternative owns a separate, deterministic
+presentation curve that:
+
+- enters through the physical junction centre;
+- turns onto a perpendicular cross street;
+- travels around a complete 26m city block;
+- rejoins the authored RouteRun centre route at the declared rejoin point;
+- carries Dash, route arrows, packages, obstacles and feature landmarks on the
+  same selected curve.
+
+Crossroads retain a straight route plus left and right side streets.
+T-junctions expose only left and right streets; the forward road is covered by
+a physical dead-end apron, barrier and blocked facade. The cross street owns a
+separate wet-road surface, shoulders, curbs and dashed centre markings so it
+reads as street geometry even before a choice is made.
+
+The city generator samples every non-straight branch before placing buildings.
+It treats each road and shoulder as protected geometry, excludes the street
+being dressed from its own collision test, and checks proposed buildings
+against the main road and every competing branch. Only the dressing for the
+chosen alternative is active at runtime; the other street surfaces remain
+visible for decision readability without rendering duplicate cities.
+
+Alley segments use their authored narrower width, close service facades,
+window bands, a labelled entrance and a restrained overhead shortcut frame.
+The mobile camera widens slightly inside an alley so both walls and the clear
+running corridor remain visible. Buildings, props and signs may compress the
+space, but none may cross the playable asphalt.
 
 ## Materials and textures
 

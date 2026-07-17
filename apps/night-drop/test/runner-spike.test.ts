@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { SpatialRunnerController, resolveSpatialRouteWindow } from "@hustle/routerun";
 import {
   NIGHT_DROP_RUNNER_TIMELINE,
@@ -12,6 +13,10 @@ import {
 import { describeNightDropBuilding } from "../src/runner-spike/night-drop-building-kit.js";
 import { resolveNightDropDistrict } from "../src/runner-spike/night-drop-districts.js";
 import { NIGHT_DROP_RUNNER_FEEDBACK } from "../src/runner-spike/night-drop-runner-feedback.js";
+import {
+  createNightDropBranchStreets,
+  resolveNightDropBranchStreetPose,
+} from "../src/runner-spike/night-drop-junction-kit.js";
 import {
   NIGHT_DROP_DASH_ANIMATION_ROLES,
   NIGHT_DROP_RUNNER_PRODUCTION_MANIFEST,
@@ -173,6 +178,49 @@ describe("Night Drop cinematic runner routes", () => {
         }).toEqual(baseline);
       });
     });
+  });
+
+  it("builds true side-street detours that leave and rejoin the authored route", () => {
+    const route = composeNightDropRunnerRoute("cross-city");
+    const mainPath = new THREE.CatmullRomCurve3(
+      route.samples.map(({ position }) => new THREE.Vector3(position.x, position.y, position.z)),
+      false,
+      "centripetal",
+      .28,
+    );
+    const streets = createNightDropBranchStreets(mainPath, route);
+    const crossroads = route.branches.find(({ junctionKind }) => junctionKind === "crossroads")!;
+    const leftStreet = streets.find(({ branchId, direction }) => branchId === crossroads.id && direction === "left")!;
+
+    expect(leftStreet.path.getPointAt(0).distanceTo(mainPath.getPointAt(crossroads.entryProgress))).toBeLessThan(.01);
+    expect(leftStreet.path.getPointAt(1).distanceTo(mainPath.getPointAt(crossroads.rejoinProgress))).toBeLessThan(.01);
+    expect(leftStreet.path.getPointAt(.5).distanceTo(mainPath.getPointAt(
+      crossroads.entryProgress + (crossroads.rejoinProgress - crossroads.entryProgress) * .5,
+    ))).toBeGreaterThan(14);
+
+    const pose = resolveNightDropBranchStreetPose(
+      streets,
+      route,
+      { [crossroads.id]: leftStreet.alternativeId },
+      crossroads.entryProgress + (crossroads.rejoinProgress - crossroads.entryProgress) * .5,
+    );
+    expect(pose).toMatchObject({ branchId: crossroads.id, direction: "left" });
+    expect(pose?.point.distanceTo(mainPath.getPointAt(
+      crossroads.entryProgress + (crossroads.rejoinProgress - crossroads.entryProgress) * .5,
+    ))).toBeGreaterThan(14);
+
+    route.branches.filter(({ junctionKind }) => junctionKind === "t-junction").forEach((junction) => {
+      expect(streets.filter(({ branchId }) => branchId === junction.id).map(({ direction }) => direction)).toEqual(["left", "right"]);
+    });
+  });
+
+  it("keeps service alleys physically narrower than ordinary city streets", () => {
+    const route = composeNightDropRunnerRoute("city-sprint");
+    const alley = route.segments.find(({ kind }) => kind === "alley")!;
+    const ordinaryStreet = route.segments.find(({ kind }) => kind === "street")!;
+
+    expect(alley.width).toBeLessThan(ordinaryStreet.width);
+    expect(alley.width).toBeLessThanOrEqual(3.4);
   });
 
   it("restores obstacle progress and input history without changing the paid result", () => {
